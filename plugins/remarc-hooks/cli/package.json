@@ -1,0 +1,16 @@
+{
+  "name": "@metedata/remarc-hooks-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/hook.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/hook.js --banner:js=\"#!/usr/bin/env node\"",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.6"
+  }
+}

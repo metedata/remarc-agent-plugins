@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RemarcAppState",
+  "description": "Canonical schema for ~/Library/Application Support/Remarc/comments.json. Derived from the AppState TypeScript interface in data.ts and the Swift Codable struct in the Remarc app. Permits unknown fields for forward compatibility.",
+  "type": "object",
+  "required": ["sessions", "comments"],
+  "additionalProperties": true,
+  "properties": {
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "createdAt"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "createdAt": { "type": ["string", "number"] },
+          "isDeleted": { "type": "boolean" },
+          "deletedAt": { "type": ["string", "number", "null"] },
+          "isAutoDismissed": { "type": "boolean" },
+          "autoDismissedAt": { "type": ["string", "number", "null"] },
+          "origin": { "type": "string", "enum": ["manual", "claudeCode"] },
+          "claudeCodeSessionId": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "commentText", "createdAt", "updatedAt"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "commentText": { "type": "string" },
+          "shortID": { "type": "string" },
+          "source": { "type": "string" },
+          "createdAt": { "type": ["string", "number"] },
+          "updatedAt": { "type": ["string", "number"] },
+          "sessionID": { "type": "string" },
+          "isDeleted": { "type": "boolean" },
+          "deletedAt": { "type": ["string", "number", "null"] },
+          "status": {
+            "type": "string",
+            "enum": ["open", "handedOff", "inProgress", "resolved"]
+          }
+        }
+      }
+    },
+    "activeSessionID": { "type": ["string", "null"] },
+    "totalCommentsCreated": { "type": "number" }
+  }
+}

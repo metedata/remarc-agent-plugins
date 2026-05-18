@@ -1,0 +1,59 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    # macos-latest because the hook bundle shells out to `defaults` (macOS-only)
+    # and we want the smoke test to exercise the full stack.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+
+      - name: build + test remarc MCP
+        working-directory: plugins/remarc/mcp
+        run: npm ci && npm test && npm run build
+
+      - name: build + test remarc-hooks CLI
+        working-directory: plugins/remarc-hooks/cli
+        run: npm ci && npm test && npm run build
+
+      - name: verify committed dist/ matches build output
+        run: |
+          if ! git diff --exit-code plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist; then
+            echo "ERROR: dist/ is out of date. Run 'npm run build' in each bundle and commit."
+            exit 1
+          fi
+
+      - name: install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: validate marketplace
+        run: claude plugin validate .
+
+      - name: install ajv for fixture validation
+        working-directory: plugins/shared
+        run: npm ci
+
+      - name: cross-decode schema fixture
+        working-directory: plugins/shared
+        run: |
+          node -e "
+            const sample = require('./fixtures/comments.sample.json');
+            const Ajv = require('ajv').default;
+            const schema = require('./comments-schema.json');
+            const ajv = new Ajv({ allowUnionTypes: true });
+            const valid = ajv.validate(schema, sample);
+            if (!valid) { console.error(ajv.errors); process.exit(1); }
+            console.log('schema valid against fixture');
+          "
+
+      - name: exercise install-from-cache path
+        run: |
+          claude plugin marketplace add "$GITHUB_WORKSPACE"
+          claude plugin install remarc@remarc
+          claude plugin install remarc-hooks@remarc
+          test -f "$HOME/.claude/plugins/cache/remarc/remarc/"*"/mcp/dist/index.js"
+          test -f "$HOME/.claude/plugins/cache/remarc/remarc-hooks/"*"/cli/dist/hook.js"

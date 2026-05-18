@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "remarc",
+  "description": "Read, address, and resolve Remarc comments from Claude Code.",
+  "author": { "name": "Mete Polat", "email": "metepolat.a@gmail.com" },
+  "homepage": "https://remarc.app",
+  "repository": "https://github.com/metedata/remarc-agent-plugins",
+  "license": "MIT",
+  "keywords": ["remarc", "comments", "macos", "code-review"]
+}

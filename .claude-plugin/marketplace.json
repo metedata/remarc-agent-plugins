@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "remarc",
+  "owner": { "name": "Mete Polat", "email": "metepolat.a@gmail.com" },
+  "description": "Plugins for the Remarc macOS contextual commenting app.",
+  "plugins": [
+    {
+      "name": "remarc",
+      "source": "./plugins/remarc",
+      "description": "Required: MCP server and skill for managing Remarc comments from Claude Code."
+    },
+    {
+      "name": "remarc-hooks",
+      "source": "./plugins/remarc-hooks",
+      "description": "Optional, experimental: session-lifecycle hooks that auto-link Claude Code sessions to Remarc sessions and inject open comments on session start. Off by default - install only if you want automatic context injection."
+    }
+  ]
+}

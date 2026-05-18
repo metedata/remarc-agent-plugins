@@ -1,0 +1,207 @@
+{
+  "orphanedImages": [
+    {
+      "deletedAt": 800503917.979941,
+      "id": "3D069340-801B-4F20-869F-FA39174DF1E0",
+      "path": "images/585D51B7-919E-4635-A831-8E5063AE128D.png"
+    },
+    {
+      "deletedAt": 800503917.980006,
+      "id": "4F632316-B5AF-4A3B-9C33-0474A190992C",
+      "path": "images/6730A101-5FAC-4D8F-84DD-BE968E048558.png"
+    },
+    {
+      "deletedAt": 800503917.980069,
+      "id": "6576E093-E20F-4F7E-ABDB-277D5E158775",
+      "path": "images/311D7A4B-15DA-4D05-BFFD-82CA79227322.png"
+    },
+    {
+      "deletedAt": 800503917.980131,
+      "id": "84493425-9F0F-40AD-932E-D26D935931C6",
+      "path": "images/490CF3B3-6262-4E66-843F-6EE084DC8CE7.png"
+    },
+    {
+      "deletedAt": 800503917.980193,
+      "id": "6DBB60EA-E1C3-474B-AC04-60644ADCD049",
+      "path": "images/4601F9D6-C816-4383-9031-9F41C65F897A.png"
+    },
+    {
+      "deletedAt": 800503917.980255,
+      "id": "F60D90B9-B091-46F5-BDCE-8963A1AD5698",
+      "path": "images/88A6409D-661A-40A1-9D0A-336C1C5DB0C0.png"
+    },
+    {
+      "deletedAt": 800503917.980317,
+      "id": "A1EDE7C8-1BC3-4812-85C2-0E997EAF84BA",
+      "path": "images/A1972551-FE42-4BE8-96AB-64A767E20EC9.png"
+    },
+    {
+      "deletedAt": 800503929.624958,
+      "id": "F6BD5189-2BCE-4EC4-A676-0927CD3DF314",
+      "path": "images/B63FE282-92A8-4FD2-AA56-4BDD636105DD.png"
+    },
+    {
+      "deletedAt": 800503929.624958,
+      "id": "7A0835A0-93BF-4576-82C6-26891C860FDE",
+      "path": "images/F0B7B2A9-C0FE-4D88-95C7-77583D4472C5.png"
+    },
+    {
+      "deletedAt": 800503917.980636,
+      "id": "651C2716-4E46-4CB7-9DF3-6670B7AE6DBF",
+      "path": "images/206DA8A6-A712-4B17-B212-200876276969.png"
+    },
+    {
+      "deletedAt": 800503917.980698,
+      "id": "681296F7-6B31-4DB7-9D05-98E84E6794BC",
+      "path": "images/90C2AB40-02D6-4BEF-8C81-88E0D0E53C24.png"
+    },
+    {
+      "deletedAt": 800548059.856526,
+      "id": "DD06C9CB-C9E2-4951-BEB0-8895C4784B86",
+      "path": "images/37441633-70EA-4DFC-883A-6A6A0CFD3351.png"
+    }
+  ],
+  "totalCommentsCreated": 365,
+  "activeSessionID": "F7898C1E-3635-4654-AAAD-A2A7EBA7F4C5",
+  "sessions": [
+    {
+      "createdAt": 795977016.769,
+      "origin": "manual",
+      "id": "F7898C1E-3635-4654-AAAD-A2A7EBA7F4C5",
+      "isDeleted": false,
+      "name": "Sample session 1",
+      "isAutoDismissed": false
+    }
+  ],
+  "comments": [],
+  "transcriptions": [
+    {
+      "createdAt": 800561969.676078,
+      "text": "For my Flora feedback node, can you add that this is confusing? I thought that the number here indicates the amount of layers that I'm going to split an image into. And then it turns out this is the amount of nodes it creates.",
+      "id": "F0DF2691-C615-4196-8391-E6A9B613D696",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800562115.378224,
+      "text": "Can you not format feedback in absolutes like this should be Y or this should be X just a little closer to like suggestions or things that I'm observations and things that I'm confused about in a similar manner that I describe them to you versus like this should be X or this should be Y don't be prescriptive",
+      "id": "428421FF-99C2-4352-9DCB-AEEEB4807FD0",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800562860.546548,
+      "text": "Hey, I want to remove some small elements from this transparent image, but I don't understand how to just, you know, like, remove a certain element here and there while keeping the rest of the image the same and transparent.",
+      "id": "913C5644-CA3E-4E91-A95B-02A0E1BBA5D9",
+      "appName": "Arc",
+      "isDeleted": false,
+      "appBundleID": "company.thebrowser.Browser"
+    },
+    {
+      "createdAt": 800563543.661383,
+      "text": "Another piece of feedback for Flora. I had this image that I cropped out of another transparent image and I needed to get rid of that little noise at the edges while keeping the image exactly the same transparent same resolution and I just couldn't figure out how to do it on Flora. I tried to inpaint. I tried to do a bunch of other stuff and it just wouldn't do it. In Figma, there's a lasso tool. You just select that area and say erase and it just did it with no issues. So you should probably have something like that. <|startoftranscript|><|0.00|><|endoftext|>",
+      "id": "6C378DF2-3340-4957-A139-5D7EB212CE2E",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800563955.761395,
+      "text": "Because later on I want to create an HTML with all this feedback and I want the images to be there as well.",
+      "id": "607181CE-99C9-48C6-A92C-47FCC8294B01",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800564046.026805,
+      "text": "Please create a photo of a hotel gym taken from a normal angle on an old generation iPhone, not glamorous or fancy, something that you would just take quickly to send to a friend.",
+      "id": "1843E552-297C-442A-BFE2-F16FFAACA292",
+      "appName": "Arc",
+      "isDeleted": false,
+      "appBundleID": "company.thebrowser.Browser"
+    },
+    {
+      "createdAt": 800566751.805188,
+      "text": "Also this picker is too transparent",
+      "id": "A11A6745-23FF-4C8B-BF58-00E26C38FE1F",
+      "appName": "Claude",
+      "isDeleted": false,
+      "appBundleID": "com.anthropic.claudefordesktop"
+    },
+    {
+      "createdAt": 800566776.809815,
+      "text": "Also remove these tags, about \"Pitch them\" on interactive, I don't need that.",
+      "id": "10DE31EB-B190-43F6-976F-7102D218F76B",
+      "appName": "Claude",
+      "isDeleted": false,
+      "appBundleID": "com.anthropic.claudefordesktop"
+    },
+    {
+      "createdAt": 800570113.310949,
+      "text": "I had form annotations for this photo as if this is something I sent to my fitness trainer and he used a marker to show me how to improve my form and what I'm doing wrong and what to focus on.",
+      "id": "CAF0810B-1EA1-4FAF-AC2F-9B3D24B5754A",
+      "appName": "Arc",
+      "isDeleted": false,
+      "appBundleID": "company.thebrowser.Browser"
+    },
+    {
+      "createdAt": 800570510.886761,
+      "text": "Can you annotate this photo to give me form tips on what I can do better with my handstand? Imagine",
+      "id": "8E0F1850-EDA0-475E-97C7-0C1DCDD40626",
+      "appName": "Arc",
+      "isDeleted": false,
+      "appBundleID": "company.thebrowser.Browser"
+    },
+    {
+      "createdAt": 800570855.073998,
+      "text": "When you're done, can you also deploy this to Vercel so I have a preview link? Thank you.",
+      "id": "4CA9F602-79B2-4E03-9CC7-DE336AAD9D8A",
+      "appName": "Claude",
+      "isDeleted": false,
+      "appBundleID": "com.anthropic.claudefordesktop"
+    },
+    {
+      "createdAt": 800750119.865305,
+      "text": "Hey, overall this is decent.",
+      "id": "085424E1-51C3-4145-9F5C-37DCAC528614",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800750183.254138,
+      "text": "But there are a bunch of places where either the layout is a bit broken or you have some... There's a bunch of elements that just don't need to be there. I highlighted them in red, but like... We don't need all these like additional weird tags and elements that say like... I don't know. If you're replicating the UI, just replicate the UI. Don't... If something doesn't need to be there, like you need to think from the mindset of... And there's a bunch of stuff here. That's a bit extraneous but I highlighted the stuff that I want you to fix and remove and then the other thing is for the The left side with the obsidian visualizations I want those visuals to be generally the same height as the chat visualization as well",
+      "id": "A86FD342-3376-47CE-AD2B-0376E6FC9D92",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800750210.085642,
+      "text": "For the bill pay use case, when I said the vacuum part broke, can you...",
+      "id": "F894F98D-CEDC-4983-9340-DDB2D2C3CC73",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800750328.197408,
+      "text": "Also for many of these, the actual Obsidian visualization doesn't really make a ton of sense to me, to be honest. I want you to put this through Claude Code and think critically about what is the best thing to show here. and some options are show my actual folder structure for example or show a snapshot of a real note right with simplified content. Stuff of that nature like what are the elements that could be useful here. Some of the stuff that you're showing here like a vacuum replacement part card like what is this This is not related to anything. We're not actually creating a node. There was no node being created. The whole point was that you went out and bought the part. It wasn't like an idea capture situation. So please review each of these visualizations again and make sure that they're actually aligned with the actual use case. And for each visualization, please think if it could be improved. some of the options for each use case of like what we could visualize and which one you picked and why and then that will help me understand what alternatives there are. <|startoftranscript|><|0.00|><|endoftext|>",
+      "id": "5FAC0264-2CF8-4C3F-977E-FB225297B329",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    },
+    {
+      "createdAt": 800750397.793836,
+      "text": "The other thing is for the chat. The chat is better, but in some cases, again, like for example, with Bill Pay, make sure that it starts with me sending a photo. It could be a placeholder for now and I can give you the actual photo later because I sent you a photo of the part and then you just found it, right? So for your responses there's also tool calls which they're usually pretty lengthy but I want you to actually try to show some of the tools that you're invoking like web search and link payments and so on and then showing that here. Before telling me something like \"Hey I found a part, sent for your approval, sent me You're not actually creating a note here.",
+      "id": "B089792A-BC79-4EC2-8802-837BF750CD5A",
+      "appName": "Telegram",
+      "isDeleted": false,
+      "appBundleID": "ru.keepcoder.Telegram"
+    }
+  ]
+}

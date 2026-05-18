@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "remarc-hooks",
+  "description": "EXPERIMENTAL session-lifecycle hooks for Remarc. Auto-creates a Remarc session linked to each Claude Code session and injects open comments on session start. Install only if you want automatic context injection.",
+  "author": { "name": "Mete Polat", "email": "metepolat.a@gmail.com" },
+  "homepage": "https://remarc.app",
+  "repository": "https://github.com/metedata/remarc-agent-plugins",
+  "license": "MIT",
+  "keywords": ["remarc", "hooks", "experimental"],
+  "dependencies": ["remarc"]
+}

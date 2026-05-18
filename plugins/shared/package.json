@@ -1,0 +1,9 @@
+{
+  "name": "@metedata/remarc-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "devDependencies": {
+    "ajv": "^8.17.0"
+  }
+}
