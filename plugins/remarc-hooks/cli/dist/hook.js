@@ -924,8 +924,13 @@ function watchPaths() {
   return [getDataFilePath()];
 }
 function isStrictHarness(input) {
-  const p = input.transcript_path ?? "";
-  return p.includes("/.codex/") || p.includes("/.codex\\");
+  const candidates = [
+    input.transcript_path ?? "",
+    process.env.CLAUDE_PLUGIN_ROOT ?? "",
+    process.env.PLUGIN_ROOT ?? "",
+    process.env.CODEX_HOME ?? ""
+  ];
+  return candidates.some((p) => p.includes("/.codex/") || p.endsWith("/.codex"));
 }
 async function onSessionStart(input) {
   if (input.agent_type || !input.session_id) return {};

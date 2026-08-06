@@ -100,8 +100,18 @@ function watchPaths(): string[] {
  * CLAUDE_PLUGIN_ROOT for compatibility, so env cannot distinguish them.
  */
 function isStrictHarness(input: { transcript_path?: string }): boolean {
-  const p = input.transcript_path ?? "";
-  return p.includes("/.codex/") || p.includes("/.codex\\");
+  // Two independent signals, because either can be absent: Codex writes
+  // transcripts under ~/.codex/sessions/, and installs plugins under
+  // ~/.codex/plugins/cache/ - so the plugin root it hands us also names it.
+  // Without the second check, a payload with no transcript_path would be
+  // treated as Claude Code and break Codex again.
+  const candidates = [
+    input.transcript_path ?? "",
+    process.env.CLAUDE_PLUGIN_ROOT ?? "",
+    process.env.PLUGIN_ROOT ?? "",
+    process.env.CODEX_HOME ?? "",
+  ];
+  return candidates.some((p) => p.includes("/.codex/") || p.endsWith("/.codex"));
 }
 
 async function onSessionStart(input: {
