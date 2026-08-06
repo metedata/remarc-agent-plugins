@@ -108,7 +108,20 @@ function watchPaths(): string[] {
  * path (Codex writes ~/.codex/sessions/...) rather than env vars: Codex sets
  * CLAUDE_PLUGIN_ROOT for compatibility, so env cannot distinguish them.
  */
+let portableMode = false;
+
+/** Set from argv (`--portable`), which the Codex hook manifest passes. */
+export function setPortableMode(on: boolean): void {
+  portableMode = on;
+}
+
 function isStrictHarness(input: { transcript_path?: string }): boolean {
+  // Deterministic when the harness told us: Codex loads its own manifest
+  // (.codex-plugin is preferred over .claude-plugin), and that manifest passes
+  // --portable. The heuristics below are only a fallback for a harness that
+  // reuses hooks.json, since a custom CODEX_HOME means the plugin root need
+  // not mention .codex at all.
+  if (portableMode) return true;
   // Two independent signals, because either can be absent: Codex writes
   // transcripts under ~/.codex/sessions/, and installs plugins under
   // ~/.codex/plugins/cache/ - so the plugin root it hands us also names it.
@@ -319,6 +332,7 @@ async function onSessionEnd(input: { session_id?: string }): Promise<Envelope> {
 // the naive `import.meta.url === \`file://\${process.argv[1]}\`` form.
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
   const event = process.argv[2] ?? "";
+  setPortableMode(process.argv.includes("--portable"));
   let raw = "";
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) raw += chunk;

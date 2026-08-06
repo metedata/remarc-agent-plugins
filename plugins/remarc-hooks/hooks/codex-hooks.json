@@ -1,0 +1,39 @@
+{
+  "description": "Codex-specific hook set. Codex prefers .codex-plugin over .claude-plugin, so this file - not hooks.json - is what it loads. It declares only events Codex supports, and passes --portable so the hook emits the output subset Codex's strict schema accepts (hookEventName + additionalContext only). Wake needs FileChanged + asyncRewake, which Codex does not have, so it is deliberately absent here.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact|clear|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" session-start --portable",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" prompt-submit --portable",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" session-end --portable",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

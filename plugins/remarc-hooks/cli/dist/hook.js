@@ -966,7 +966,12 @@ function json(envelope) {
 function watchPaths() {
   return [getDataFilePath()];
 }
+var portableMode = false;
+function setPortableMode(on) {
+  portableMode = on;
+}
 function isStrictHarness(input) {
+  if (portableMode) return true;
   const candidates = [
     input.transcript_path ?? "",
     process.env.CLAUDE_PLUGIN_ROOT ?? "",
@@ -1114,6 +1119,7 @@ async function onSessionEnd(input) {
 }
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
   const event = process.argv[2] ?? "";
+  setPortableMode(process.argv.includes("--portable"));
   let raw = "";
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) raw += chunk;
@@ -1135,5 +1141,6 @@ if (fileURLToPath(import.meta.url) === process.argv[1]) {
   process.exit(result.exitCode);
 }
 export {
-  runHook
+  runHook,
+  setPortableMode
 };
