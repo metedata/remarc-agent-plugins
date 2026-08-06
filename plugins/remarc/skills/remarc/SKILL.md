@@ -94,6 +94,12 @@ requested action is complete, and `open` to reopen a comment.
 Always include a concise `summary` when setting `resolved`; the tool requires
 one. Prefer `remarc_bulk_set_status` for batch handoff or batch resolution.
 
+Pass `expected_status` to claim a comment other sessions may also be working:
+`remarc_set_status(id, "inProgress", expected_status: "handedOff")` succeeds for
+exactly one caller. If it reports the comment is already `inProgress`, another
+agent has it - skip that comment rather than duplicating the work. A comment
+that arrives through a wake reminder always needs this claim first.
+
 ### `remarc_bulk_set_status`
 
 Use for status updates across multiple comments. Prefer this over repeated
