@@ -1,7 +1,8 @@
-import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rename, mkdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
+import { randomBytes } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Apple Epoch Conversion
@@ -128,6 +129,8 @@ export interface RawComment {
   attachments?: string[];
   webContext?: WebContext | null;
   regionElements?: WebContext[] | null;
+  wakeRequestedAt?: number | null;
+  [k: string]: unknown;
 }
 
 export interface Comment {
@@ -149,6 +152,17 @@ export interface Comment {
   attachments: string[];
   webContext: WebContext | null;
   regionElements: WebContext[] | null;
+  /**
+   * Wake request timestamp (Apple epoch on the wire). Written only by the app
+   * when the user presses "Send instantly & save". Read by the hooks plugin to
+   * decide whether a comment should wake an idle Claude Code session.
+   */
+  wakeRequestedAt: Date | null;
+  /**
+   * Every key present on disk that this build does not model, preserved so a
+   * write from an older plugin cannot delete fields a newer app wrote.
+   */
+  unknownFields: Record<string, unknown>;
 }
 
 export interface RawSession {
@@ -161,6 +175,7 @@ export interface RawSession {
   autoDismissedAt?: number | null;
   origin?: string;
   claudeCodeSessionId?: string | null;
+  [k: string]: unknown;
 }
 
 export interface Session {
@@ -173,6 +188,8 @@ export interface Session {
   autoDismissedAt: Date | null;
   origin: string;
   claudeCodeSessionId: string | null;
+  /** Unmodeled keys present on disk, preserved on round-trip. */
+  unknownFields: Record<string, unknown>;
 }
 
 export interface RawAppState {
@@ -182,6 +199,7 @@ export interface RawAppState {
   activeSessionID?: string | null;
   activeStackID?: string | null; // legacy
   totalCommentsCreated: number;
+  [k: string]: unknown;
 }
 
 export interface AppState {
@@ -189,6 +207,12 @@ export interface AppState {
   comments: Comment[];
   activeSessionID: string | null;
   totalCommentsCreated: number;
+  /**
+   * Top-level keys this build does not model - notably `orphanedImages` and
+   * `transcriptions`, which the Swift app persists. Preserved on round-trip;
+   * before this existed, any plugin write silently deleted them.
+   */
+  unknownFields: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +244,36 @@ function parseType(raw: RawComment): CommentType {
   return { quickNote: {} };
 }
 
+/** Keys this build models on a comment; everything else is preserved verbatim. */
+const KNOWN_COMMENT_KEYS = new Set([
+  "id", "type", "selectedText", "commentText", "source", "appBundleID",
+  "createdAt", "updatedAt", "sessionID", "stackID", "isDeleted", "deletedAt",
+  "status", "resolutionSummary", "resolvedBy", "resolvedAt", "attachments",
+  "webContext", "regionElements", "wakeRequestedAt",
+]);
+
+const KNOWN_SESSION_KEYS = new Set([
+  "id", "name", "createdAt", "isDeleted", "deletedAt", "isAutoDismissed",
+  "autoDismissedAt", "origin", "claudeCodeSessionId",
+]);
+
+const KNOWN_STATE_KEYS = new Set([
+  "sessions", "stacks", "comments", "activeSessionID", "activeStackID",
+  "totalCommentsCreated",
+]);
+
+/** Collect every key of `raw` that is not in `known`. */
+function collectUnknown(
+  raw: Record<string, unknown>,
+  known: Set<string>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!known.has(k)) out[k] = v;
+  }
+  return out;
+}
+
 function parseComment(raw: RawComment): Comment {
   return {
     id: raw.id,
@@ -240,6 +294,9 @@ function parseComment(raw: RawComment): Comment {
     attachments: raw.attachments ?? [],
     webContext: raw.webContext ?? null,
     regionElements: raw.regionElements ?? null,
+    wakeRequestedAt:
+      raw.wakeRequestedAt != null ? appleToDate(raw.wakeRequestedAt) : null,
+    unknownFields: collectUnknown(raw, KNOWN_COMMENT_KEYS),
   };
 }
 
@@ -255,6 +312,7 @@ function parseSession(raw: RawSession): Session {
       raw.autoDismissedAt != null ? appleToDate(raw.autoDismissedAt) : null,
     origin: raw.origin ?? "manual",
     claudeCodeSessionId: raw.claudeCodeSessionId ?? null,
+    unknownFields: collectUnknown(raw, KNOWN_SESSION_KEYS),
   };
 }
 
@@ -265,6 +323,7 @@ export function parseAppState(raw: RawAppState): AppState {
     comments: raw.comments.map(parseComment),
     activeSessionID: raw.activeSessionID ?? raw.activeStackID ?? null,
     totalCommentsCreated: raw.totalCommentsCreated,
+    unknownFields: collectUnknown(raw, KNOWN_STATE_KEYS),
   };
 }
 
@@ -274,6 +333,7 @@ export function parseAppState(raw: RawAppState): AppState {
 
 function serializeComment(c: Comment): RawComment {
   const raw: RawComment = {
+    ...c.unknownFields,
     id: c.id,
     type: c.type,
     commentText: c.commentText,
@@ -292,11 +352,15 @@ function serializeComment(c: Comment): RawComment {
   raw.attachments = c.attachments;
   if (c.webContext != null) raw.webContext = c.webContext;
   if (c.regionElements != null) raw.regionElements = c.regionElements;
+  if (c.wakeRequestedAt != null) {
+    raw.wakeRequestedAt = dateToApple(c.wakeRequestedAt);
+  }
   return raw;
 }
 
 function serializeSession(s: Session): RawSession {
   return {
+    ...s.unknownFields,
     id: s.id,
     name: s.name,
     createdAt: dateToApple(s.createdAt),
@@ -312,6 +376,7 @@ function serializeSession(s: Session): RawSession {
 
 export function serializeAppState(state: AppState): object {
   return {
+    ...state.unknownFields,
     sessions: state.sessions.map(serializeSession),
     comments: state.comments.map(serializeComment),
     activeSessionID: state.activeSessionID,
@@ -342,7 +407,14 @@ export async function readAppState(): Promise<AppState | null> {
   }
 }
 
-/** Write the app state atomically (write .tmp, then rename). */
+/**
+ * Write the app state atomically (unique .tmp, then rename).
+ *
+ * Prefer `withDocument` for mutations: state read outside the lock can be
+ * stale, and writing it clobbers whatever another process committed meanwhile.
+ * This stays exported because `withDocument` calls it and some callers legitimately
+ * replace the whole document.
+ */
 export async function writeAppState(state: AppState): Promise<void> {
   const filePath = getDataFilePath();
   const dir = dirname(filePath);
@@ -352,10 +424,136 @@ export async function writeAppState(state: AppState): Promise<void> {
     await mkdir(dir, { recursive: true });
   }
 
-  const tmpPath = filePath + ".tmp";
+  // Unique temp name: a fixed one lets concurrent writers interleave through
+  // the same path and lose or tear a write.
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   const json = JSON.stringify(serializeAppState(state), null, 2);
   await writeFile(tmpPath, json, "utf-8");
   await rename(tmpPath, filePath);
+}
+
+// ---------------------------------------------------------------------------
+// Cross-process document transaction
+// ---------------------------------------------------------------------------
+
+/**
+ * Lock directory beside the data file. `mkdir` is atomic on POSIX and behaves
+ * the same from Swift (`createDirectory` with `withIntermediateDirectories:
+ * false` throws when it exists), so the app, MCP server, and hooks share one
+ * protocol without needing a native flock binding in Node.
+ */
+function getLockPath(): string {
+  return getDataFilePath() + ".lock";
+}
+
+const LOCK_TIMEOUT_MS = 2000;
+const LOCK_POLL_MS = 25;
+/** A lock this old with a dead owner is treated as abandoned. */
+const LOCK_STALE_MS = 10_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True if a process with this pid exists (signal 0 delivers nothing). */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    // EPERM: the process exists but is owned by someone else.
+    return (err as NodeJS.ErrnoException)?.code === "EPERM";
+  }
+}
+
+async function acquireLock(): Promise<string> {
+  const lockPath = getLockPath();
+  const dir = dirname(lockPath);
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await mkdir(lockPath); // atomic; exactly one caller succeeds
+      await writeFile(
+        join(lockPath, "owner.json"),
+        JSON.stringify({ pid: process.pid, at: Date.now() }),
+        "utf-8"
+      );
+      return lockPath;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException)?.code !== "EEXIST") throw err;
+
+      // Someone holds it. Reclaim only if that someone is gone.
+      try {
+        const info = await stat(lockPath);
+        let abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
+        if (!abandoned) {
+          try {
+            const owner = JSON.parse(
+              await readFile(join(lockPath, "owner.json"), "utf-8")
+            ) as { pid?: number };
+            if (typeof owner.pid === "number" && !pidAlive(owner.pid)) {
+              abandoned = true;
+            }
+          } catch {
+            // Owner file missing or unreadable: rely on the age check.
+          }
+        }
+        if (abandoned) {
+          await rm(lockPath, { recursive: true, force: true }).catch(() => {});
+          continue;
+        }
+      } catch {
+        // Lock disappeared between EEXIST and stat; retry immediately.
+      }
+
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Timed out after ${LOCK_TIMEOUT_MS}ms waiting for the Remarc data lock (${lockPath})`
+        );
+      }
+      await sleep(LOCK_POLL_MS);
+    }
+  }
+}
+
+async function releaseLock(lockPath: string): Promise<void> {
+  await rm(lockPath, { recursive: true, force: true }).catch(() => {});
+}
+
+/** Return this from a `withDocument` mutator to finish without writing. */
+export const SKIP_WRITE = Symbol("remarc.skipWrite");
+
+/**
+ * Run a mutation as a transaction: acquire the lock, read the document fresh
+ * from disk, apply `mutate` in place, write, rename, release.
+ *
+ * The lock spans read-through-rename. Locking only the write still loses
+ * updates, because the snapshot being written may predate another process's
+ * commit. Every mutating caller must go through this instead of pairing
+ * `readAppState` with `writeAppState`.
+ */
+export async function withDocument<T>(
+  mutate: (state: AppState) => T | Promise<T>
+): Promise<T> {
+  const lockPath = await acquireLock();
+  try {
+    const state = (await readAppState()) ?? {
+      sessions: [],
+      comments: [],
+      activeSessionID: null,
+      totalCommentsCreated: 0,
+      unknownFields: {},
+    };
+    const result = await mutate(state);
+    if ((result as unknown) !== SKIP_WRITE) {
+      await writeAppState(state);
+    }
+    return result;
+  } finally {
+    await releaseLock(lockPath);
+  }
 }
 
 // ---------------------------------------------------------------------------
