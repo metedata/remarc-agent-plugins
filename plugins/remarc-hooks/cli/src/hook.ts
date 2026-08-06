@@ -87,6 +87,23 @@ function watchPaths(): string[] {
   return [getDataFilePath()];
 }
 
+/**
+ * Codex reads this same plugin repo natively, but validates hook output
+ * strictly: its SessionStart schema allows only `hookEventName` and
+ * `additionalContext` (additionalProperties: false), so emitting `watchPaths`
+ * or `sessionTitle` makes it reject the ENTIRE payload - the hook is reported
+ * as failed and the comment context never arrives.
+ *
+ * Codex also has no FileChanged/CwdChanged events and skips `async` hooks, so
+ * those extra fields buy nothing there anyway. Detect it from the transcript
+ * path (Codex writes ~/.codex/sessions/...) rather than env vars: Codex sets
+ * CLAUDE_PLUGIN_ROOT for compatibility, so env cannot distinguish them.
+ */
+function isStrictHarness(input: { transcript_path?: string }): boolean {
+  const p = input.transcript_path ?? "";
+  return p.includes("/.codex/") || p.includes("/.codex\\");
+}
+
 async function onSessionStart(input: {
   source?: string;
   session_id?: string;
@@ -102,20 +119,38 @@ async function onSessionStart(input: {
   // so returning {} on any pairing path (auto-create disabled, no marker after
   // /clear, unknown source) would leave wake permanently disarmed for that
   // session.
-  const base: Envelope = {
-    hookSpecificOutput: {
-      hookEventName: "SessionStart",
-      watchPaths: watchPaths(),
-    },
-  };
+  // Harnesses that reject unknown output keys get the portable subset.
+  const strict = isStrictHarness(input);
+  const base: Envelope = strict
+    ? {}
+    : {
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          watchPaths: watchPaths(),
+        },
+      };
 
-  const withContext = (extra: Record<string, unknown>): Envelope => ({
-    hookSpecificOutput: {
-      hookEventName: "SessionStart",
-      watchPaths: watchPaths(),
-      ...extra,
-    },
-  });
+  const withContext = (extra: Record<string, unknown>): Envelope => {
+    if (strict) {
+      // additionalContext is the only field Codex accepts here, and it is the
+      // one that actually carries the comments.
+      const context = extra.additionalContext;
+      if (typeof context !== "string" || !context) return {};
+      return {
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext: context,
+        },
+      };
+    }
+    return {
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        watchPaths: watchPaths(),
+        ...extra,
+      },
+    };
+  };
 
   // `fork` needs its own case: a matcher alone would let forked sessions fall
   // through to the default return and start life with no pairing or backlog.
@@ -168,8 +203,8 @@ async function onSessionStart(input: {
  * list empties and the data file stops being watched, so wake dies silently -
  * and a shell `cd` is routine.
  */
-function onCwdChanged(input: { session_id?: string }): Envelope {
-  if (!input.session_id) return {};
+function onCwdChanged(input: { session_id?: string; transcript_path?: string }): Envelope {
+  if (!input.session_id || isStrictHarness(input)) return {};
   return {
     hookSpecificOutput: {
       hookEventName: "CwdChanged",

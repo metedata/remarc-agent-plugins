@@ -108,6 +108,44 @@ describe("session-start: watch registration", () => {
     expect(createSession).toHaveBeenCalled();
   });
 
+  it("omits Claude-Code-only fields for Codex, keeping the context", async () => {
+    // Codex's SessionStart output schema is additionalProperties:false and
+    // allows only hookEventName + additionalContext. Emitting watchPaths or
+    // sessionTitle makes it reject the WHOLE payload, so the comments never
+    // arrive - verified live against codex-cli 0.146.1.
+    const { runHook } = await import("./hook.js");
+    const res = await runHook(
+      "session-start",
+      JSON.stringify({
+        source: "startup",
+        session_id: "codex-abc",
+        cwd: "/Users/m/proj",
+        transcript_path: "/Users/mete/.codex/sessions/2026/08/06/rollout-x.jsonl",
+      })
+    );
+
+    const out = JSON.parse(res.stdout).hookSpecificOutput;
+    expect(out.additionalContext).toContain("Remarc Comments");
+    expect(out.watchPaths).toBeUndefined();
+    expect(out.sessionTitle).toBeUndefined();
+    expect(Object.keys(out).sort()).toEqual(["additionalContext", "hookEventName"]);
+  });
+
+  it("emits nothing at all for Codex when there is no context to deliver", async () => {
+    const { readBoolDefault } = await import("./defaults.js");
+    vi.mocked(readBoolDefault).mockResolvedValueOnce(false);
+    const { runHook } = await import("./hook.js");
+    const res = await runHook(
+      "session-start",
+      JSON.stringify({
+        source: "startup",
+        session_id: "codex-abc",
+        transcript_path: "/Users/mete/.codex/sessions/r.jsonl",
+      })
+    );
+    expect(res.stdout).toBe("{}");
+  });
+
   it("ignores subagent sessions", async () => {
     const { runHook } = await import("./hook.js");
     const res = await runHook(
@@ -135,6 +173,18 @@ describe("cwd-changed: watch re-registration", () => {
   it("no-ops without a session id", async () => {
     const { runHook } = await import("./hook.js");
     expect((await runHook("cwd-changed", "{}")).stdout).toBe("{}");
+  });
+
+  it("stays silent on Codex, which has no CwdChanged event", async () => {
+    const { runHook } = await import("./hook.js");
+    const res = await runHook(
+      "cwd-changed",
+      JSON.stringify({
+        session_id: "codex-abc",
+        transcript_path: "/Users/mete/.codex/sessions/r.jsonl",
+      })
+    );
+    expect(res.stdout).toBe("{}");
   });
 });
 

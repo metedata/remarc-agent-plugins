@@ -923,22 +923,39 @@ function json(envelope) {
 function watchPaths() {
   return [getDataFilePath()];
 }
+function isStrictHarness(input) {
+  const p = input.transcript_path ?? "";
+  return p.includes("/.codex/") || p.includes("/.codex\\");
+}
 async function onSessionStart(input) {
   if (input.agent_type || !input.session_id) return {};
   const source = input.source ?? "startup";
-  const base = {
+  const strict = isStrictHarness(input);
+  const base = strict ? {} : {
     hookSpecificOutput: {
       hookEventName: "SessionStart",
       watchPaths: watchPaths()
     }
   };
-  const withContext = (extra) => ({
-    hookSpecificOutput: {
-      hookEventName: "SessionStart",
-      watchPaths: watchPaths(),
-      ...extra
+  const withContext = (extra) => {
+    if (strict) {
+      const context = extra.additionalContext;
+      if (typeof context !== "string" || !context) return {};
+      return {
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext: context
+        }
+      };
     }
-  });
+    return {
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        watchPaths: watchPaths(),
+        ...extra
+      }
+    };
+  };
   if (source === "startup" || source === "resume" || source === "fork") {
     const autoCreate = await readBoolDefault("claudeCodeAutoCreateSession");
     if (autoCreate === false) return base;
@@ -977,7 +994,7 @@ async function onSessionStart(input) {
   return base;
 }
 function onCwdChanged(input) {
-  if (!input.session_id) return {};
+  if (!input.session_id || isStrictHarness(input)) return {};
   return {
     hookSpecificOutput: {
       hookEventName: "CwdChanged",
