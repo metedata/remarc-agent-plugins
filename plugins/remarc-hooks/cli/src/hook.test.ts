@@ -83,6 +83,58 @@ describe("session-start: watch registration", () => {
     expect(createSession).not.toHaveBeenCalled();
   });
 
+  it("still records wake capability when session auto-create is disabled", async () => {
+    // The app decides whether to offer the wake button by reading `wakeCapable`
+    // off the markers. Auto-create only governs whether a Remarc session gets
+    // made, so skipping the marker here hid the button forever from anyone who
+    // creates their sessions by hand - watchPaths alone is not enough.
+    const { readBoolDefault } = await import("./defaults.js");
+    vi.mocked(readBoolDefault).mockResolvedValueOnce(false);
+    const { updateMarker } = await import("./marker.js");
+    vi.mocked(updateMarker).mockClear();
+    const { runHook } = await import("./hook.js");
+    await runHook(
+      "session-start",
+      JSON.stringify({
+        source: "startup",
+        session_id: "claude-abc",
+        cwd: "/Users/m/proj",
+        transcript_path: "/Users/m/.claude/t.jsonl",
+      })
+    );
+
+    expect(updateMarker).toHaveBeenCalledWith("claude-abc", expect.any(Function));
+    const mutate = vi.mocked(updateMarker).mock.calls[0][1];
+    const marker: Record<string, unknown> = { wakeCapable: false, lastActivity: null };
+    mutate(marker as never);
+    expect(marker.wakeCapable).toBe(true);
+    expect(marker.transcriptPath).toBe("/Users/m/.claude/t.jsonl");
+    expect(typeof marker.lastActivity).toBe("string");
+  });
+
+  it("does not claim wake capability under a strict harness with auto-create off", async () => {
+    // Codex has no rewake hook. Recording it as wake-capable would put a button
+    // in front of the user that cannot reach anything.
+    const { readBoolDefault } = await import("./defaults.js");
+    vi.mocked(readBoolDefault).mockResolvedValueOnce(false);
+    const { updateMarker } = await import("./marker.js");
+    vi.mocked(updateMarker).mockClear();
+    const { runHook } = await import("./hook.js");
+    await runHook(
+      "session-start",
+      JSON.stringify({
+        source: "startup",
+        session_id: "codex-abc",
+        transcript_path: "/Users/mete/.codex/sessions/r.jsonl",
+      })
+    );
+
+    const mutate = vi.mocked(updateMarker).mock.calls[0][1];
+    const marker: Record<string, unknown> = { wakeCapable: true };
+    mutate(marker as never);
+    expect(marker.wakeCapable).toBe(false);
+  });
+
   it("still emits watchPaths for compact/clear with no marker", async () => {
     const { readMarker } = await import("./marker.js");
     vi.mocked(readMarker).mockResolvedValueOnce(null);

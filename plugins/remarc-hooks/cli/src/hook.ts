@@ -195,7 +195,20 @@ async function onSessionStart(input: {
   // through to the default return and start life with no pairing or backlog.
   if (source === "startup" || source === "resume" || source === "fork") {
     const autoCreate = await readBoolDefault("claudeCodeAutoCreateSession");
-    if (autoCreate === false) return base;
+    if (autoCreate === false) {
+      // Auto-create governs whether a Remarc *session* gets made, not whether
+      // this harness can be woken - so the marker still has to be written.
+      // Without it nothing ever records `wakeCapable`, the app sees no live
+      // wake-capable session, and the wake button stays hidden forever for
+      // anyone who creates their sessions by hand. Wake itself needs no paired
+      // session; it falls back to the Inbox.
+      await updateMarker(input.session_id, (m) => {
+        m.transcriptPath = input.transcript_path ?? null;
+        m.lastActivity = new Date().toISOString();
+        m.wakeCapable = !strict;
+      });
+      return base;
+    }
 
     const name = basename(input.cwd ?? process.cwd()) || "Session";
     const result = await createSession({

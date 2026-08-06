@@ -1019,7 +1019,14 @@ async function onSessionStart(input) {
   };
   if (source === "startup" || source === "resume" || source === "fork") {
     const autoCreate = await readBoolDefault("claudeCodeAutoCreateSession");
-    if (autoCreate === false) return base;
+    if (autoCreate === false) {
+      await updateMarker(input.session_id, (m) => {
+        m.transcriptPath = input.transcript_path ?? null;
+        m.lastActivity = (/* @__PURE__ */ new Date()).toISOString();
+        m.wakeCapable = !strict;
+      });
+      return base;
+    }
     const name = basename(input.cwd ?? process.cwd()) || "Session";
     const result = await createSession({
       name,
