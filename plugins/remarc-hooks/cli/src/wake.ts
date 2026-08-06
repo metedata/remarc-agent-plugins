@@ -257,15 +257,18 @@ async function readMarkerSafe(claudeSessionId: string): Promise<Marker | null> {
 export function selectQueueComments(
   state: AppState,
   remarcSessionId: string,
-  marker: Marker | null
+  marker: Marker | null,
+  includeInbox = true
 ): Comment[] {
   const delivered = new Set(marker?.deliveredIds ?? []);
   const target = remarcSessionId.toUpperCase();
-  const inboxIds = new Set(
-    state.sessions
-      .filter((s) => !s.isDeleted && s.name.trim().toLowerCase() === "inbox")
-      .map((s) => s.id.toUpperCase())
-  );
+  const inboxIds = includeInbox
+    ? new Set(
+        state.sessions
+          .filter((s) => !s.isDeleted && s.name.trim().toLowerCase() === "inbox")
+          .map((s) => s.id.toUpperCase())
+      )
+    : new Set<string>();
 
   return state.comments
     .filter((c) => {

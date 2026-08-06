@@ -197,6 +197,15 @@ describe("selectQueueComments", () => {
     expect(got.map((c) => c.id).sort()).toEqual(["A", "B"]);
   });
 
+  it("can be told to leave Inbox comments out", () => {
+    const s = state([
+      comment({ id: "A", sessionID: "S1", status: "open", wakeRequestedAt: null }),
+      comment({ id: "B", sessionID: "S2", status: "open", wakeRequestedAt: null }),
+    ]);
+    expect(selectQueueComments(s, "S1", marker(), false).map((c) => c.id)).toEqual(["A"]);
+    expect(selectQueueComments(s, "S1", marker(), true).map((c) => c.id).sort()).toEqual(["A", "B"]);
+  });
+
   it("includes handedOff comments so a missed wake still arrives", () => {
     const s = state([comment({ id: "A", status: "handedOff" })]);
     expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
