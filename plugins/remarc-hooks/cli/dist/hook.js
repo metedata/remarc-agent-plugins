@@ -31,11 +31,16 @@ import { randomBytes as randomBytes3 } from "node:crypto";
 function markersDir() {
   return join2(homedir2(), "Library", "Application Support", "Remarc", "claude", "markers");
 }
+function safeSessionId(claudeSessionId) {
+  const cleaned = claudeSessionId.replace(/[^A-Za-z0-9_-]/g, "");
+  if (!cleaned) throw new Error("Invalid Claude session id");
+  return cleaned.slice(0, 128);
+}
 function markerPath(claudeSessionId) {
-  return join2(markersDir(), `${claudeSessionId}.json`);
+  return join2(markersDir(), `${safeSessionId(claudeSessionId)}.json`);
 }
 function legacyMarkerPath(claudeSessionId) {
-  return `/tmp/remarc-claude-${claudeSessionId}.marker`;
+  return `/tmp/remarc-claude-${safeSessionId(claudeSessionId)}.marker`;
 }
 function emptyMarker() {
   return {
@@ -50,9 +55,8 @@ function emptyMarker() {
 function coerce(raw) {
   if (raw == null || typeof raw !== "object") return null;
   const r = raw;
-  if (typeof r.remarcSessionId !== "string" || !r.remarcSessionId) return null;
   return {
-    remarcSessionId: r.remarcSessionId,
+    remarcSessionId: typeof r.remarcSessionId === "string" ? r.remarcSessionId : "",
     dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
     transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
     lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
@@ -87,20 +91,45 @@ async function readMarker(claudeSessionId) {
 function sleep2(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
+function pidAlive2(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === "EPERM";
+  }
+}
 async function acquire(lockPath) {
   const deadline = Date.now() + LOCK_TIMEOUT_MS2;
   for (; ; ) {
     try {
       await mkdir2(lockPath);
+      await writeFile2(
+        join2(lockPath, "owner.json"),
+        JSON.stringify({ pid: process.pid, at: Date.now() }),
+        "utf8"
+      ).catch(() => {
+      });
       return;
     } catch (err) {
       if (err?.code !== "EEXIST") throw err;
       try {
         const info = await stat2(lockPath);
-        if (Date.now() - info.mtimeMs > LOCK_STALE_MS2) {
-          await rm2(lockPath, { recursive: true, force: true }).catch(() => {
-          });
-          continue;
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile2(join2(lockPath, "owner.json"), "utf8")
+          );
+          abandoned = typeof owner.pid === "number" && !pidAlive2(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS2;
+        }
+        if (abandoned) {
+          try {
+            await rm2(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+          }
         }
       } catch {
         continue;
@@ -402,32 +431,37 @@ async function acquireLock() {
   for (; ; ) {
     try {
       await mkdir(lockPath);
-      await writeFile(
-        join(lockPath, "owner.json"),
-        JSON.stringify({ pid: process.pid, at: Date.now() }),
-        "utf-8"
-      );
+      try {
+        await writeFile(
+          join(lockPath, "owner.json"),
+          JSON.stringify({ pid: process.pid, at: Date.now() }),
+          "utf-8"
+        );
+      } catch (err) {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {
+        });
+        throw err;
+      }
       return lockPath;
     } catch (err) {
       if (err?.code !== "EEXIST") throw err;
       try {
         const info = await stat(lockPath);
-        let abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
-        if (!abandoned) {
-          try {
-            const owner = JSON.parse(
-              await readFile(join(lockPath, "owner.json"), "utf-8")
-            );
-            if (typeof owner.pid === "number" && !pidAlive(owner.pid)) {
-              abandoned = true;
-            }
-          } catch {
-          }
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile(join(lockPath, "owner.json"), "utf-8")
+          );
+          abandoned = typeof owner.pid === "number" && !pidAlive(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
         }
         if (abandoned) {
-          await rm(lockPath, { recursive: true, force: true }).catch(() => {
-          });
-          continue;
+          try {
+            await rm(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+          }
         }
       } catch {
       }
@@ -615,20 +649,8 @@ async function handoff(input) {
     lines.push("");
   }
   if (comments.length > 0) {
-    const label = input.recovery ? "outstanding" : "new";
-    lines.push(`## Remarc Comments (${comments.length} ${label})`);
-    lines.push("");
-    for (const comment of comments) {
-      lines.push(`### [${comment.shortID}] ${comment.commentText}`);
-      if (comment.type && "comment" in comment.type) {
-        lines.push(`> Selected text: "${comment.type.comment.text}"`);
-      }
-      if (comment.source) {
-        lines.push(`Source: ${comment.source}`);
-      }
-      lines.push(`Status: ${comment.status}`);
-      lines.push("");
-    }
+    const formatted = formatComments(comments, state, 9e3);
+    if (formatted.text) lines.push(formatted.text);
   } else if (input.recovery) {
     lines.push("No outstanding Remarc comments.");
   }
@@ -674,71 +696,71 @@ ${text}
 <<<END-${token}>>>`;
 }
 async function windDown(input) {
-  const state = await readAppState();
-  if (!state) return;
-  const sessionIdUpper = input.remarcSessionId.toUpperCase();
-  const sessionIdx = state.sessions.findIndex((s) => s.id.toUpperCase() === sessionIdUpper);
-  if (sessionIdx === -1) return;
   const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "autoDelete");
-  const now = /* @__PURE__ */ new Date();
-  switch (behavior) {
-    case "keep":
-      break;
-    case "moveUnresolved": {
-      let inbox = state.sessions.find(
-        (s) => s.name === "Inbox" && !s.isDeleted && !s.isAutoDismissed
-      );
-      if (!inbox) {
-        const inboxSession = {
-          id: randomUUID(),
-          name: "Inbox",
-          createdAt: now,
-          isDeleted: false,
-          deletedAt: null,
-          isAutoDismissed: false,
-          autoDismissedAt: null,
-          origin: "manual",
-          claudeCodeSessionId: null,
-          unknownFields: {}
-        };
-        state.sessions.push(inboxSession);
-        inbox = inboxSession;
-      }
-      for (let i = 0; i < state.comments.length; i++) {
-        const c = state.comments[i];
-        if (c.sessionID.toUpperCase() === sessionIdUpper && !c.isDeleted && ["open", "handedOff", "inProgress"].includes(c.status)) {
-          state.comments[i].sessionID = inbox.id;
-          state.comments[i].updatedAt = now;
+  await withDocument((state) => {
+    const sessionIdUpper = input.remarcSessionId.toUpperCase();
+    const sessionIdx = state.sessions.findIndex((s) => s.id.toUpperCase() === sessionIdUpper);
+    if (sessionIdx === -1) return SKIP_WRITE;
+    const now = /* @__PURE__ */ new Date();
+    switch (behavior) {
+      case "keep":
+        break;
+      case "moveUnresolved": {
+        let inbox = state.sessions.find(
+          (s) => s.name === "Inbox" && !s.isDeleted && !s.isAutoDismissed
+        );
+        if (!inbox) {
+          const inboxSession = {
+            id: randomUUID(),
+            name: "Inbox",
+            createdAt: now,
+            isDeleted: false,
+            deletedAt: null,
+            isAutoDismissed: false,
+            autoDismissedAt: null,
+            origin: "manual",
+            claudeCodeSessionId: null,
+            unknownFields: {}
+          };
+          state.sessions.push(inboxSession);
+          inbox = inboxSession;
         }
-      }
-      state.sessions[sessionIdx].isDeleted = true;
-      state.sessions[sessionIdx].deletedAt = now;
-      for (let i = 0; i < state.comments.length; i++) {
-        if (state.comments[i].sessionID.toUpperCase() === sessionIdUpper && !state.comments[i].isDeleted) {
-          state.comments[i].isDeleted = true;
-          state.comments[i].deletedAt = now;
+        for (let i = 0; i < state.comments.length; i++) {
+          const c = state.comments[i];
+          if (c.sessionID.toUpperCase() === sessionIdUpper && !c.isDeleted && ["open", "handedOff", "inProgress"].includes(c.status)) {
+            state.comments[i].sessionID = inbox.id;
+            state.comments[i].updatedAt = now;
+          }
         }
+        state.sessions[sessionIdx].isDeleted = true;
+        state.sessions[sessionIdx].deletedAt = now;
+        for (let i = 0; i < state.comments.length; i++) {
+          if (state.comments[i].sessionID.toUpperCase() === sessionIdUpper && !state.comments[i].isDeleted) {
+            state.comments[i].isDeleted = true;
+            state.comments[i].deletedAt = now;
+          }
+        }
+        break;
       }
-      break;
+      case "autoDelete":
+      default: {
+        state.sessions[sessionIdx].isDeleted = true;
+        state.sessions[sessionIdx].deletedAt = now;
+        for (let i = 0; i < state.comments.length; i++) {
+          if (state.comments[i].sessionID.toUpperCase() === sessionIdUpper) {
+            state.comments[i].isDeleted = true;
+            state.comments[i].deletedAt = now;
+          }
+        }
+        break;
+      }
     }
-    case "autoDelete":
-    default: {
-      state.sessions[sessionIdx].isDeleted = true;
-      state.sessions[sessionIdx].deletedAt = now;
-      for (let i = 0; i < state.comments.length; i++) {
-        if (state.comments[i].sessionID.toUpperCase() === sessionIdUpper) {
-          state.comments[i].isDeleted = true;
-          state.comments[i].deletedAt = now;
-        }
-      }
-      break;
+    if (state.activeSessionID?.toUpperCase() === sessionIdUpper) {
+      const remaining = state.sessions.filter((s) => !s.isDeleted && !s.isAutoDismissed);
+      state.activeSessionID = remaining.length > 0 ? remaining[0].id : null;
     }
-  }
-  if (state.activeSessionID?.toUpperCase() === sessionIdUpper) {
-    const remaining = state.sessions.filter((s) => !s.isDeleted && !s.isAutoDismissed);
-    state.activeSessionID = remaining.length > 0 ? remaining[0].id : null;
-  }
-  await writeAppState(state);
+    return void 0;
+  });
   notifyRemarcReload();
 }
 
@@ -851,15 +873,34 @@ async function runWake(claudeSessionId, sleep3 = (ms) => new Promise((r) => setT
   if (stillEligible.length === 0) return null;
   const { text, includedIds } = buildWakePayload(stillEligible);
   if (includedIds.length === 0) return null;
-  const liveIds = new Set(second.comments.filter((c) => !c.isDeleted).map((c) => c.id));
+  const liveIds = new Set(
+    second.comments.filter((c) => !c.isDeleted && c.status !== "resolved").map((c) => c.id)
+  );
   const generations = new Map(stillEligible.map((c) => [c.id, c.requestedAt]));
+  let alreadyClaimed = false;
   await updateMarker(claudeSessionId, (m) => {
+    const unclaimed = includedIds.filter(
+      (id) => (m.wakedAt[id] ?? -1) < (generations.get(id) ?? 0)
+    );
+    if (unclaimed.length === 0) {
+      alreadyClaimed = true;
+      return;
+    }
     const next = { ...m.wakedAt };
-    for (const id of includedIds) next[id] = generations.get(id) ?? Date.now();
+    for (const id of unclaimed) next[id] = generations.get(id) ?? Date.now();
     m.wakedAt = pruneWakes(next, liveIds);
     m.lastActivity = (/* @__PURE__ */ new Date()).toISOString();
   });
-  return { stderrText: text, exitCode: 2 };
+  if (alreadyClaimed) return null;
+  const commit = async () => {
+    await updateMarker(claudeSessionId, (m) => {
+      const next = { ...m.wakedAt };
+      for (const id of includedIds) next[id] = generations.get(id) ?? Date.now();
+      m.wakedAt = pruneWakes(next, liveIds);
+      m.lastActivity = (/* @__PURE__ */ new Date()).toISOString();
+    });
+  };
+  return { stderrText: text, exitCode: 2, commit };
 }
 async function readMarkerSafe(claudeSessionId) {
   const { readMarker: readMarker2 } = await Promise.resolve().then(() => (init_marker(), marker_exports));
@@ -898,8 +939,10 @@ async function runHook(event, rawInput) {
     switch (event) {
       case "session-start":
         return json(await onSessionStart(input));
-      case "prompt-submit":
-        return json(await onPromptSubmit(input));
+      case "prompt-submit": {
+        const r = await onPromptSubmit(input);
+        return { ...json(r.envelope), commit: r.commit };
+      }
       case "session-end":
         return json(await onSessionEnd(input));
       case "cwd-changed":
@@ -988,7 +1031,7 @@ async function onSessionStart(input) {
   }
   if (source === "compact" || source === "clear") {
     const marker = await readMarker(input.session_id);
-    if (!marker) return base;
+    if (!marker?.remarcSessionId) return base;
     const context = await handoff({
       remarcSessionId: marker.remarcSessionId,
       claudeSessionId: input.session_id,
@@ -1011,44 +1054,57 @@ async function onFileChanged(input) {
   if (!input.session_id) return EMPTY;
   const wake = await runWake(input.session_id);
   if (!wake) return EMPTY;
-  return { stdout: "{}", stderrText: wake.stderrText, exitCode: wake.exitCode };
+  return {
+    stdout: "{}",
+    stderrText: wake.stderrText,
+    exitCode: wake.exitCode,
+    commit: wake.commit
+  };
 }
 async function onPromptSubmit(input) {
-  if (!input.session_id) return {};
+  if (!input.session_id) return { envelope: {} };
   const marker = await readMarker(input.session_id);
-  if (!marker) return {};
+  if (!marker?.remarcSessionId) return { envelope: {} };
   const state = await readAppState();
-  if (!state) return {};
+  if (!state) return { envelope: {} };
   const eligible = selectQueueComments(state, marker.remarcSessionId, marker);
   if (eligible.length === 0) {
     await touchMarker(input.session_id);
-    return {};
+    return { envelope: {} };
   }
   const selected = eligible.slice(0, MAX_QUEUE_COMMENTS);
   const context = formatComments(selected, state, MAX_QUEUE_CHARS);
   if (!context.text) {
     await touchMarker(input.session_id);
-    return {};
+    return { envelope: {} };
   }
-  const liveIds = new Set(state.comments.filter((c) => !c.isDeleted).map((c) => c.id));
-  await updateMarker(input.session_id, (m) => {
-    m.deliveredIds = pruneIds(
-      [.../* @__PURE__ */ new Set([...m.deliveredIds, ...context.includedIds])],
-      liveIds
-    );
-    m.lastActivity = (/* @__PURE__ */ new Date()).toISOString();
-  });
+  const sessionId = input.session_id;
+  const liveIds = new Set(
+    state.comments.filter((c) => !c.isDeleted && c.status !== "resolved").map((c) => c.id)
+  );
+  const commit = async () => {
+    await updateMarker(sessionId, (m) => {
+      m.deliveredIds = pruneIds(
+        [.../* @__PURE__ */ new Set([...m.deliveredIds, ...context.includedIds])],
+        liveIds
+      );
+      m.lastActivity = (/* @__PURE__ */ new Date()).toISOString();
+    });
+  };
   return {
-    hookSpecificOutput: {
-      hookEventName: "UserPromptSubmit",
-      additionalContext: context.text
-    }
+    envelope: {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: context.text
+      }
+    },
+    commit
   };
 }
 async function onSessionEnd(input) {
   if (!input.session_id) return {};
   const marker = await readMarker(input.session_id);
-  if (!marker) return {};
+  if (!marker?.remarcSessionId) return {};
   try {
     await windDown({ remarcSessionId: marker.remarcSessionId });
   } catch {
@@ -1062,8 +1118,20 @@ if (fileURLToPath(import.meta.url) === process.argv[1]) {
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) raw += chunk;
   const result = await runHook(event, raw);
-  if (result.stdout !== "{}") process.stdout.write(result.stdout);
-  if (result.stderrText) process.stderr.write(result.stderrText);
+  await new Promise((resolve) => {
+    if (result.stdout !== "{}") process.stdout.write(result.stdout, () => resolve());
+    else resolve();
+  });
+  await new Promise((resolve) => {
+    if (result.stderrText) process.stderr.write(result.stderrText, () => resolve());
+    else resolve();
+  });
+  if (result.commit) {
+    try {
+      await result.commit();
+    } catch {
+    }
+  }
   process.exit(result.exitCode);
 }
 export {

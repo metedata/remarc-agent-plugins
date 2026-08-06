@@ -11,6 +11,7 @@ import {
   readAppState,
   writeAppState,
   withDocument,
+  SKIP_WRITE,
   getDataFilePath,
   applyStatusUpdate,
 } from "./data.js";
@@ -173,21 +174,12 @@ export async function handoff(input: HandoffInput): Promise<string> {
   }
 
   if (comments.length > 0) {
-    const label = input.recovery ? "outstanding" : "new";
-    lines.push(`## Remarc Comments (${comments.length} ${label})`);
-    lines.push("");
-
-    for (const comment of comments) {
-      lines.push(`### [${comment.shortID}] ${comment.commentText}`);
-      if (comment.type && "comment" in comment.type) {
-        lines.push(`> Selected text: "${comment.type.comment.text}"`);
-      }
-      if (comment.source) {
-        lines.push(`Source: ${comment.source}`);
-      }
-      lines.push(`Status: ${comment.status}`);
-      lines.push("");
-    }
+    // Same hygiene as queue delivery: comment text, selected text and source
+    // can all carry page-controlled strings, and this lands in the agent's
+    // instruction channel. Raw Markdown here was escapable with a quote and a
+    // newline.
+    const formatted = formatComments(comments, state, 9000);
+    if (formatted.text) lines.push(formatted.text);
   } else if (input.recovery) {
     lines.push("No outstanding Remarc comments.");
   }
@@ -263,14 +255,16 @@ export interface WindDownInput {
 }
 
 export async function windDown(input: WindDownInput): Promise<void> {
-  const state = await readAppState();
-  if (!state) return;
+  // Read the preference BEFORE opening the transaction: it shells out to
+  // `defaults`, and holding the document lock across a subprocess would block
+  // every other writer for the duration.
+  const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "autoDelete");
 
+  await withDocument((state) => {
   const sessionIdUpper = input.remarcSessionId.toUpperCase();
   const sessionIdx = state.sessions.findIndex((s) => s.id.toUpperCase() === sessionIdUpper);
-  if (sessionIdx === -1) return;
+  if (sessionIdx === -1) return SKIP_WRITE;
 
-  const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "autoDelete");
   const now = new Date();
 
   switch (behavior) {
@@ -343,7 +337,8 @@ export async function windDown(input: WindDownInput): Promise<void> {
     state.activeSessionID = remaining.length > 0 ? remaining[0].id : null;
   }
 
-  await writeAppState(state);
+  return undefined;
+  });
   notifyRemarcReload();
 }
 

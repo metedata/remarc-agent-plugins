@@ -475,34 +475,45 @@ async function acquireLock(): Promise<string> {
   for (;;) {
     try {
       await mkdir(lockPath); // atomic; exactly one caller succeeds
-      await writeFile(
-        join(lockPath, "owner.json"),
-        JSON.stringify({ pid: process.pid, at: Date.now() }),
-        "utf-8"
-      );
+      try {
+        await writeFile(
+          join(lockPath, "owner.json"),
+          JSON.stringify({ pid: process.pid, at: Date.now() }),
+          "utf-8"
+        );
+      } catch (err) {
+        // Do not leave an ownerless directory behind - it would look like a
+        // held lock that nobody can attribute.
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {});
+        throw err;
+      }
       return lockPath;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException)?.code !== "EEXIST") throw err;
 
-      // Someone holds it. Reclaim only if that someone is gone.
+      // Someone holds it. Reclaim only if that someone is demonstrably gone -
+      // age alone must never evict a live holder, or both processes end up
+      // "holding" the lock and the loser's release deletes the winner's.
       try {
         const info = await stat(lockPath);
-        let abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
-        if (!abandoned) {
-          try {
-            const owner = JSON.parse(
-              await readFile(join(lockPath, "owner.json"), "utf-8")
-            ) as { pid?: number };
-            if (typeof owner.pid === "number" && !pidAlive(owner.pid)) {
-              abandoned = true;
-            }
-          } catch {
-            // Owner file missing or unreadable: rely on the age check.
-          }
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile(join(lockPath, "owner.json"), "utf-8")
+          ) as { pid?: number };
+          abandoned = typeof owner.pid === "number" && !pidAlive(owner.pid);
+        } catch {
+          // No readable owner yet: only a generous age check may decide.
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
         }
         if (abandoned) {
-          await rm(lockPath, { recursive: true, force: true }).catch(() => {});
-          continue;
+          try {
+            await rm(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+            // Removal failed (permissions). Fall through to the backoff below
+            // instead of spinning without delay.
+          }
         }
       } catch {
         // Lock disappeared between EEXIST and stat; retry immediately.

@@ -193,7 +193,11 @@ describe("file-changed: wake", () => {
 
   it("exits 2 with the payload on stderr when there is something to wake for", async () => {
     const { runWake } = await import("./wake.js");
-    vi.mocked(runWake).mockResolvedValueOnce({ stderrText: "WAKE-PAYLOAD", exitCode: 2 });
+    vi.mocked(runWake).mockResolvedValueOnce({
+      stderrText: "WAKE-PAYLOAD",
+      exitCode: 2,
+      commit: async () => {},
+    });
     const { runHook } = await import("./hook.js");
     const res = await runHook("file-changed", JSON.stringify({ session_id: "claude-abc" }));
 

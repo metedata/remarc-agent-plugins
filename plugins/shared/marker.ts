@@ -36,13 +36,25 @@ function markersDir(): string {
   return join(homedir(), "Library", "Application Support", "Remarc", "claude", "markers");
 }
 
+/**
+ * Session ids arrive from hook payloads and from an MCP tool argument, so they
+ * are caller-controlled. Anything but the id charset would let
+ * `../../../evil` escape the markers directory and let writeMarker/removeMarker
+ * clobber or delete arbitrary files.
+ */
+function safeSessionId(claudeSessionId: string): string {
+  const cleaned = claudeSessionId.replace(/[^A-Za-z0-9_-]/g, "");
+  if (!cleaned) throw new Error("Invalid Claude session id");
+  return cleaned.slice(0, 128);
+}
+
 export function markerPath(claudeSessionId: string): string {
-  return join(markersDir(), `${claudeSessionId}.json`);
+  return join(markersDir(), `${safeSessionId(claudeSessionId)}.json`);
 }
 
 /** Legacy /tmp text marker written by builds before the JSON format. */
 export function legacyMarkerPath(claudeSessionId: string): string {
-  return `/tmp/remarc-claude-${claudeSessionId}.marker`;
+  return `/tmp/remarc-claude-${safeSessionId(claudeSessionId)}.marker`;
 }
 
 function emptyMarker(): Marker {
@@ -59,9 +71,13 @@ function emptyMarker(): Marker {
 function coerce(raw: unknown): Marker | null {
   if (raw == null || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  if (typeof r.remarcSessionId !== "string" || !r.remarcSessionId) return null;
+  // Deliberately NOT requiring remarcSessionId. The wake path creates a marker
+  // purely to record what it has woken for, and never pairs a Remarc session -
+  // rejecting those made every wake marker unreadable, so the same comment woke
+  // on every single file change, forever. Callers that need a pairing check the
+  // field themselves.
   return {
-    remarcSessionId: r.remarcSessionId,
+    remarcSessionId: typeof r.remarcSessionId === "string" ? r.remarcSessionId : "",
     dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
     transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
     lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
@@ -121,19 +137,48 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    return (err as NodeJS.ErrnoException)?.code === "EPERM";
+  }
+}
+
 async function acquire(lockPath: string): Promise<void> {
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
   for (;;) {
     try {
       await mkdir(lockPath);
+      await writeFile(
+        join(lockPath, "owner.json"),
+        JSON.stringify({ pid: process.pid, at: Date.now() }),
+        "utf8"
+      ).catch(() => {});
       return;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException)?.code !== "EEXIST") throw err;
       try {
         const info = await stat(lockPath);
-        if (Date.now() - info.mtimeMs > LOCK_STALE_MS) {
-          await rm(lockPath, { recursive: true, force: true }).catch(() => {});
-          continue;
+        // Same rule as the document lock: a live owner keeps its lock no
+        // matter how long it has held it.
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile(join(lockPath, "owner.json"), "utf8")
+          ) as { pid?: number };
+          abandoned = typeof owner.pid === "number" && !pidAlive(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
+        }
+        if (abandoned) {
+          try {
+            await rm(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+            /* fall through to backoff */
+          }
         }
       } catch {
         continue;

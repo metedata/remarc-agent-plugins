@@ -168,6 +168,8 @@ export async function rankedDelayMs(claudeSessionId: string): Promise<number> {
 export interface WakeResult {
   stderrText: string;
   exitCode: number;
+  /** Records the wake, run only after the payload is flushed. */
+  commit: () => Promise<void>;
 }
 
 /**
@@ -200,16 +202,45 @@ export async function runWake(
   const { text, includedIds } = buildWakePayload(stillEligible);
   if (includedIds.length === 0) return null;
 
-  const liveIds = new Set(second.comments.filter((c) => !c.isDeleted).map((c) => c.id));
+  const liveIds = new Set(
+    second.comments
+      .filter((c) => !c.isDeleted && c.status !== "resolved")
+      .map((c) => c.id)
+  );
   const generations = new Map(stillEligible.map((c) => [c.id, c.requestedAt]));
+
+  // Re-check inside the marker lock: two FileChanged processes can both reach
+  // this point with the same pre-backoff snapshot, and without this both would
+  // wake for the same comment.
+  let alreadyClaimed = false;
   await updateMarker(claudeSessionId, (m) => {
+    const unclaimed = includedIds.filter(
+      (id) => (m.wakedAt[id] ?? -1) < (generations.get(id) ?? 0)
+    );
+    if (unclaimed.length === 0) {
+      alreadyClaimed = true;
+      return;
+    }
     const next = { ...m.wakedAt };
-    for (const id of includedIds) next[id] = generations.get(id) ?? Date.now();
+    for (const id of unclaimed) next[id] = generations.get(id) ?? Date.now();
     m.wakedAt = pruneWakes(next, liveIds);
     m.lastActivity = new Date().toISOString();
   });
+  if (alreadyClaimed) return null;
 
-  return { stderrText: text, exitCode: 2 };
+  // The marker is claimed here rather than in `commit` because the claim is
+  // what prevents a concurrent sibling from waking too; `commit` re-asserts it
+  // after the payload is flushed.
+  const commit = async () => {
+    await updateMarker(claudeSessionId, (m) => {
+      const next = { ...m.wakedAt };
+      for (const id of includedIds) next[id] = generations.get(id) ?? Date.now();
+      m.wakedAt = pruneWakes(next, liveIds);
+      m.lastActivity = new Date().toISOString();
+    });
+  };
+
+  return { stderrText: text, exitCode: 2, commit };
 }
 
 async function readMarkerSafe(claudeSessionId: string): Promise<Marker | null> {

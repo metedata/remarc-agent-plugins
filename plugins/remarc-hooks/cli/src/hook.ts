@@ -37,6 +37,13 @@ export interface HookResult {
   stdout: string;
   stderrText?: string;
   exitCode: number;
+  /**
+   * Marker bookkeeping, run only after the payload has actually been flushed.
+   * Committing first meant a kill, timeout or EPIPE between the marker write
+   * and the write to stdout/stderr recorded a delivery the agent never saw -
+   * and that comment was then filtered out forever.
+   */
+  commit?: () => Promise<void>;
 }
 
 const EMPTY: HookResult = { stdout: "{}", exitCode: 0 };
@@ -59,8 +66,10 @@ export async function runHook(event: string, rawInput: string): Promise<HookResu
     switch (event) {
       case "session-start":
         return json(await onSessionStart(input));
-      case "prompt-submit":
-        return json(await onPromptSubmit(input));
+      case "prompt-submit": {
+        const r = await onPromptSubmit(input);
+        return { ...json(r.envelope), commit: r.commit };
+      }
       case "session-end":
         return json(await onSessionEnd(input));
       case "cwd-changed":
@@ -193,7 +202,7 @@ async function onSessionStart(input: {
 
   if (source === "compact" || source === "clear") {
     const marker = await readMarker(input.session_id);
-    if (!marker) return base;
+    if (!marker?.remarcSessionId) return base;
     const context = await handoff({
       remarcSessionId: marker.remarcSessionId,
       claudeSessionId: input.session_id,
@@ -231,56 +240,72 @@ async function onFileChanged(input: {
   if (!input.session_id) return EMPTY;
   const wake = await runWake(input.session_id);
   if (!wake) return EMPTY;
-  return { stdout: "{}", stderrText: wake.stderrText, exitCode: wake.exitCode };
+  return {
+    stdout: "{}",
+    stderrText: wake.stderrText,
+    exitCode: wake.exitCode,
+    commit: wake.commit,
+  };
 }
 
 async function onPromptSubmit(input: {
   session_id?: string;
   prompt?: string;
-}): Promise<Envelope> {
-  if (!input.session_id) return {};
+}): Promise<{ envelope: Envelope; commit?: () => Promise<void> }> {
+  if (!input.session_id) return { envelope: {} };
   const marker = await readMarker(input.session_id);
-  if (!marker) return {};
+  // A marker with no paired Remarc session carries wake bookkeeping only.
+  if (!marker?.remarcSessionId) return { envelope: {} };
 
   const state = await readAppState();
-  if (!state) return {};
+  if (!state) return { envelope: {} };
 
   const eligible = selectQueueComments(state, marker.remarcSessionId, marker);
   if (eligible.length === 0) {
     await touchMarker(input.session_id);
-    return {};
+    return { envelope: {} };
   }
 
   const selected = eligible.slice(0, MAX_QUEUE_COMMENTS);
   const context = formatComments(selected, state, MAX_QUEUE_CHARS);
   if (!context.text) {
     await touchMarker(input.session_id);
-    return {};
+    return { envelope: {} };
   }
 
-  // Record only what the formatter actually included, and only after building
-  // the payload the caller is about to emit.
-  const liveIds = new Set(state.comments.filter((c) => !c.isDeleted).map((c) => c.id));
-  await updateMarker(input.session_id, (m) => {
-    m.deliveredIds = pruneIds(
-      [...new Set([...m.deliveredIds, ...context.includedIds])],
-      liveIds
-    );
-    m.lastActivity = new Date().toISOString();
-  });
+  // Record only what the formatter included, and only once the payload has
+  // been flushed (see HookResult.commit).
+  const sessionId = input.session_id;
+  const liveIds = new Set(
+    state.comments
+      .filter((c) => !c.isDeleted && c.status !== "resolved")
+      .map((c) => c.id)
+  );
+  const commit = async () => {
+    await updateMarker(sessionId, (m) => {
+      m.deliveredIds = pruneIds(
+        [...new Set([...m.deliveredIds, ...context.includedIds])],
+        liveIds
+      );
+      m.lastActivity = new Date().toISOString();
+    });
+  };
 
   return {
-    hookSpecificOutput: {
-      hookEventName: "UserPromptSubmit",
-      additionalContext: context.text,
+    envelope: {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: context.text,
+      },
     },
+    commit,
   };
 }
 
 async function onSessionEnd(input: { session_id?: string }): Promise<Envelope> {
   if (!input.session_id) return {};
   const marker = await readMarker(input.session_id);
-  if (!marker) return {};
+  if (!marker?.remarcSessionId) return {};
   try {
     await windDown({ remarcSessionId: marker.remarcSessionId });
   } catch {
@@ -298,7 +323,21 @@ if (fileURLToPath(import.meta.url) === process.argv[1]) {
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) raw += chunk;
   const result = await runHook(event, raw);
-  if (result.stdout !== "{}") process.stdout.write(result.stdout);
-  if (result.stderrText) process.stderr.write(result.stderrText);
+  await new Promise<void>((resolve) => {
+    if (result.stdout !== "{}") process.stdout.write(result.stdout, () => resolve());
+    else resolve();
+  });
+  await new Promise<void>((resolve) => {
+    if (result.stderrText) process.stderr.write(result.stderrText, () => resolve());
+    else resolve();
+  });
+  // Only now is the delivery real, so only now record it.
+  if (result.commit) {
+    try {
+      await result.commit();
+    } catch {
+      // A failed commit re-delivers later; that is the safe direction.
+    }
+  }
   process.exit(result.exitCode);
 }
