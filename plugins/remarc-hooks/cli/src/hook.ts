@@ -208,6 +208,9 @@ async function onSessionStart(input: {
       dataFilePath: result.dataFilePath,
       transcriptPath: input.transcript_path ?? null,
       lastActivity: new Date().toISOString(),
+      // Only a harness with file-watch + rewake can be woken; the app reads
+      // this to decide whether the wake button is worth showing.
+      wakeCapable: !strict,
     });
     const context = await handoff({
       remarcSessionId: result.remarcSessionId,

@@ -48,6 +48,7 @@ function emptyMarker() {
     dataFilePath: "",
     transcriptPath: null,
     lastActivity: null,
+    wakeCapable: false,
     deliveredIds: [],
     wakedAt: {}
   };
@@ -60,6 +61,7 @@ function coerce(raw) {
     dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
     transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
     lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
+    wakeCapable: r.wakeCapable === true,
     deliveredIds: Array.isArray(r.deliveredIds) ? r.deliveredIds.filter((x) => typeof x === "string") : [],
     // Migrate the earlier id-array shape: treat prior wakes as generation 0.
     wakedAt: r.wakedAt && typeof r.wakedAt === "object" ? r.wakedAt : Array.isArray(r.wakedIds) ? Object.fromEntries(
@@ -1028,7 +1030,10 @@ async function onSessionStart(input) {
       remarcSessionId: result.remarcSessionId,
       dataFilePath: result.dataFilePath,
       transcriptPath: input.transcript_path ?? null,
-      lastActivity: (/* @__PURE__ */ new Date()).toISOString()
+      lastActivity: (/* @__PURE__ */ new Date()).toISOString(),
+      // Only a harness with file-watch + rewake can be woken; the app reads
+      // this to decide whether the wake button is worth showing.
+      wakeCapable: !strict
     });
     const context = await handoff({
       remarcSessionId: result.remarcSessionId,

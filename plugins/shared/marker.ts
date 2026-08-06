@@ -20,6 +20,13 @@ export interface Marker {
   dataFilePath: string;
   /** Transcript file for this Claude session, used for liveness checks. */
   transcriptPath: string | null;
+  /**
+   * Whether THIS session can actually be woken. False under harnesses without
+   * file-watch + rewake hooks (Codex), which is how the app knows whether to
+   * offer the wake button: plugin-install state cannot tell it which harness
+   * the user is actually working in right now.
+   */
+  wakeCapable: boolean;
   /** Last time this session showed activity; ranks wake preference. */
   lastActivity: string | null;
   /** Comment ids already injected as context for this session. */
@@ -63,6 +70,7 @@ function emptyMarker(): Marker {
     dataFilePath: "",
     transcriptPath: null,
     lastActivity: null,
+    wakeCapable: false,
     deliveredIds: [],
     wakedAt: {},
   };
@@ -81,6 +89,7 @@ function coerce(raw: unknown): Marker | null {
     dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
     transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
     lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
+    wakeCapable: r.wakeCapable === true,
     deliveredIds: Array.isArray(r.deliveredIds)
       ? r.deliveredIds.filter((x): x is string => typeof x === "string")
       : [],

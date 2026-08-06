@@ -64,6 +64,7 @@ function marker(over: Partial<Marker> = {}): Marker {
     dataFilePath: "/x/comments.json",
     transcriptPath: null,
     lastActivity: null,
+    wakeCapable: true,
     deliveredIds: [],
     wakedAt: {},
     ...over,
