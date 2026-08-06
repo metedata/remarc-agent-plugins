@@ -25,7 +25,7 @@ vi.mock("./marker.js", () => ({
     transcriptPath: null,
     lastActivity: null,
     deliveredIds: [],
-    wakedIds: [],
+    wakedAt: {},
   })),
   touchMarker: vi.fn(async () => {}),
   updateMarker: vi.fn(async () => {}),

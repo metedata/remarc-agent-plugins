@@ -81,7 +81,7 @@ async function writeMarker(sessionId: string, extra: Record<string, unknown> = {
       transcriptPath: null,
       lastActivity: "2026-08-06T00:00:00Z",
       deliveredIds: [],
-      wakedIds: [],
+      wakedAt: {},
       ...extra,
     })
   );

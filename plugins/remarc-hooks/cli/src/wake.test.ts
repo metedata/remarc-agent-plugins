@@ -65,7 +65,7 @@ function marker(over: Partial<Marker> = {}): Marker {
     transcriptPath: null,
     lastActivity: null,
     deliveredIds: [],
-    wakedIds: [],
+    wakedAt: {},
     ...over,
   };
 }
@@ -78,7 +78,7 @@ describe("selectWakeCandidates", () => {
       comment({ id: "C", status: "open" }), // not handed off
       comment({ id: "D" }),
     ]);
-    const got = selectWakeCandidates(s, marker({ wakedIds: ["D"] }));
+    const got = selectWakeCandidates(s, marker({ wakedAt: { D: 2000 } }));
     expect(got.map((c) => c.id)).toEqual(["A"]);
   });
 
@@ -93,6 +93,14 @@ describe("selectWakeCandidates", () => {
   it("excludes comments already claimed by another agent", () => {
     const s = state([comment({ id: "A", status: "inProgress" })]);
     expect(selectWakeCandidates(s, marker())).toEqual([]);
+  });
+
+  it("wakes again when the user presses the button a second time", () => {
+    // The marker records which generation we woke for; a fresh press moves
+    // wakeRequestedAt forward and must produce a new wake.
+    const s = state([comment({ id: "A", wakeRequestedAt: new Date(9000) })]);
+    expect(selectWakeCandidates(s, marker({ wakedAt: { A: 2000 } })).map((c) => c.id)).toEqual(["A"]);
+    expect(selectWakeCandidates(s, marker({ wakedAt: { A: 9000 } }))).toEqual([]);
   });
 
   it("treats a missing marker as no history", () => {
@@ -112,6 +120,7 @@ describe("buildWakePayload", () => {
     shortID: id.slice(0, 5).toLowerCase(),
     text,
     sessionName,
+    requestedAt: 2000,
   });
 
   it("includes full UUIDs and the compare-and-set claim instruction", () => {
@@ -179,9 +188,9 @@ describe("selectQueueComments", () => {
     // The reason comments had to be hand-carried: delivery only read the
     // freshly created paired session, which is empty.
     const s = state([
-      comment({ id: "A", sessionID: "S1", status: "open" }),
-      comment({ id: "B", sessionID: "S2", status: "open" }),
-      comment({ id: "C", sessionID: "S3", status: "open" }),
+      comment({ id: "A", sessionID: "S1", status: "open", wakeRequestedAt: null }),
+      comment({ id: "B", sessionID: "S2", status: "open", wakeRequestedAt: null }),
+      comment({ id: "C", sessionID: "S3", status: "open", wakeRequestedAt: null }),
     ]);
     const got = selectQueueComments(s, "S1", marker());
     expect(got.map((c) => c.id).sort()).toEqual(["A", "B"]);
@@ -192,19 +201,34 @@ describe("selectQueueComments", () => {
     expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
   });
 
+  it("delivers a wake-flagged comment from any session", () => {
+    // The wake path is session-independent, so its fallback has to be too:
+    // otherwise a wake comment in a manual session with nobody awake is
+    // stranded forever.
+    const s = state([
+      comment({ id: "A", sessionID: "S9", status: "handedOff", wakeRequestedAt: new Date(2000) }),
+    ]);
+    expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
+  });
+
+  it("includes inProgress so a dead claimant does not strand a comment", () => {
+    const s = state([comment({ id: "A", status: "inProgress" })]);
+    expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
+  });
+
   it("skips resolved, deleted, and already-delivered comments", () => {
     const s = state([
-      comment({ id: "A", status: "resolved" }),
-      comment({ id: "B", isDeleted: true }),
-      comment({ id: "C", status: "open" }),
+      comment({ id: "A", status: "resolved", wakeRequestedAt: null }),
+      comment({ id: "B", isDeleted: true, wakeRequestedAt: null }),
+      comment({ id: "C", status: "open", wakeRequestedAt: null }),
     ]);
     expect(selectQueueComments(s, "S1", marker({ deliveredIds: ["C"] }))).toEqual([]);
   });
 
   it("orders newest first", () => {
     const s = state([
-      comment({ id: "old", status: "open", createdAt: new Date(1000) }),
-      comment({ id: "new", status: "open", createdAt: new Date(9000) }),
+      comment({ id: "old", status: "open", createdAt: new Date(1000), wakeRequestedAt: null }),
+      comment({ id: "new", status: "open", createdAt: new Date(9000), wakeRequestedAt: null }),
     ]);
     expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["new", "old"]);
   });

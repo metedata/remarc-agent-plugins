@@ -15,6 +15,7 @@ __export(marker_exports, {
   legacyMarkerPath: () => legacyMarkerPath,
   markerPath: () => markerPath,
   pruneIds: () => pruneIds,
+  pruneWakes: () => pruneWakes,
   readAllMarkers: () => readAllMarkers,
   readMarker: () => readMarker,
   removeMarker: () => removeMarker,
@@ -43,7 +44,7 @@ function emptyMarker() {
     transcriptPath: null,
     lastActivity: null,
     deliveredIds: [],
-    wakedIds: []
+    wakedAt: {}
   };
 }
 function coerce(raw) {
@@ -56,7 +57,10 @@ function coerce(raw) {
     transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
     lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
     deliveredIds: Array.isArray(r.deliveredIds) ? r.deliveredIds.filter((x) => typeof x === "string") : [],
-    wakedIds: Array.isArray(r.wakedIds) ? r.wakedIds.filter((x) => typeof x === "string") : []
+    // Migrate the earlier id-array shape: treat prior wakes as generation 0.
+    wakedAt: r.wakedAt && typeof r.wakedAt === "object" ? r.wakedAt : Array.isArray(r.wakedIds) ? Object.fromEntries(
+      r.wakedIds.filter((x) => typeof x === "string").map((id) => [id, 0])
+    ) : {}
   };
 }
 async function readMarker(claudeSessionId) {
@@ -145,6 +149,9 @@ async function removeMarker(claudeSessionId) {
 }
 function pruneIds(ids, liveIds) {
   return ids.filter((id) => liveIds.has(id));
+}
+function pruneWakes(wakes, liveIds) {
+  return Object.fromEntries(Object.entries(wakes).filter(([id]) => liveIds.has(id)));
 }
 async function readAllMarkers() {
   const dir = markersDir();
@@ -755,20 +762,23 @@ ${text}
   };
 }
 function selectWakeCandidates(state, marker) {
-  const already = new Set(marker?.wakedIds ?? []);
+  const wokeFor = marker?.wakedAt ?? {};
   const sessionsById = new Map(state.sessions.map((s) => [s.id.toUpperCase(), s]));
   return state.comments.filter(
     (c) => c.wakeRequestedAt != null && // A deleted comment keeps its wake flag, and full-UUID MCP lookup
     // happily returns deleted records - so filter here and again after the
     // backoff re-read.
-    !c.isDeleted && c.status === "handedOff" && !already.has(c.id)
+    !c.isDeleted && c.status === "handedOff" && // Compare generations, not bare ids: pressing the wake button again on
+    // the same comment sets a newer wakeRequestedAt and must wake again.
+    (c.wakeRequestedAt?.getTime() ?? 0) > (wokeFor[c.id] ?? -1)
   ).sort(
     (a, b) => (a.wakeRequestedAt?.getTime() ?? 0) - (b.wakeRequestedAt?.getTime() ?? 0)
   ).map((c) => ({
     id: c.id,
     shortID: c.shortID,
     text: c.commentText,
-    sessionName: sessionsById.get(c.sessionID.toUpperCase())?.name ?? "Unknown session"
+    sessionName: sessionsById.get(c.sessionID.toUpperCase())?.name ?? "Unknown session",
+    requestedAt: c.wakeRequestedAt?.getTime() ?? 0
   }));
 }
 function buildWakePayload(candidates) {
@@ -842,8 +852,11 @@ async function runWake(claudeSessionId, sleep3 = (ms) => new Promise((r) => setT
   const { text, includedIds } = buildWakePayload(stillEligible);
   if (includedIds.length === 0) return null;
   const liveIds = new Set(second.comments.filter((c) => !c.isDeleted).map((c) => c.id));
+  const generations = new Map(stillEligible.map((c) => [c.id, c.requestedAt]));
   await updateMarker(claudeSessionId, (m) => {
-    m.wakedIds = pruneIds([.../* @__PURE__ */ new Set([...m.wakedIds, ...includedIds])], liveIds);
+    const next = { ...m.wakedAt };
+    for (const id of includedIds) next[id] = generations.get(id) ?? Date.now();
+    m.wakedAt = pruneWakes(next, liveIds);
     m.lastActivity = (/* @__PURE__ */ new Date()).toISOString();
   });
   return { stderrText: text, exitCode: 2 };
@@ -862,9 +875,12 @@ function selectQueueComments(state, remarcSessionId, marker) {
   const inboxIds = new Set(
     state.sessions.filter((s) => !s.isDeleted && s.name.trim().toLowerCase() === "inbox").map((s) => s.id.toUpperCase())
   );
-  return state.comments.filter(
-    (c) => !c.isDeleted && (c.status === "open" || c.status === "handedOff") && !delivered.has(c.id) && (c.sessionID.toUpperCase() === target || inboxIds.has(c.sessionID.toUpperCase()))
-  ).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return state.comments.filter((c) => {
+    if (c.isDeleted || delivered.has(c.id)) return false;
+    if (!["open", "handedOff", "inProgress"].includes(c.status)) return false;
+    const inScope = c.sessionID.toUpperCase() === target || inboxIds.has(c.sessionID.toUpperCase());
+    return inScope || c.wakeRequestedAt != null;
+  }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 // src/hook.ts

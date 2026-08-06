@@ -24,8 +24,12 @@ export interface Marker {
   lastActivity: string | null;
   /** Comment ids already injected as context for this session. */
   deliveredIds: string[];
-  /** Comment ids this session has already been woken for. */
-  wakedIds: string[];
+  /**
+   * Comment id -> the `wakeRequestedAt` value we woke for, as epoch millis.
+   * A plain id set would ignore a second press of the wake button on the same
+   * comment, because the id is already present.
+   */
+  wakedAt: Record<string, number>;
 }
 
 function markersDir(): string {
@@ -48,7 +52,7 @@ function emptyMarker(): Marker {
     transcriptPath: null,
     lastActivity: null,
     deliveredIds: [],
-    wakedIds: [],
+    wakedAt: {},
   };
 }
 
@@ -64,9 +68,17 @@ function coerce(raw: unknown): Marker | null {
     deliveredIds: Array.isArray(r.deliveredIds)
       ? r.deliveredIds.filter((x): x is string => typeof x === "string")
       : [],
-    wakedIds: Array.isArray(r.wakedIds)
-      ? r.wakedIds.filter((x): x is string => typeof x === "string")
-      : [],
+    // Migrate the earlier id-array shape: treat prior wakes as generation 0.
+    wakedAt:
+      r.wakedAt && typeof r.wakedAt === "object"
+        ? (r.wakedAt as Record<string, number>)
+        : Array.isArray(r.wakedIds)
+          ? Object.fromEntries(
+              (r.wakedIds as unknown[])
+                .filter((x): x is string => typeof x === "string")
+                .map((id) => [id, 0])
+            )
+          : {},
   };
 }
 
@@ -188,6 +200,14 @@ export async function removeMarker(claudeSessionId: string): Promise<void> {
  */
 export function pruneIds(ids: string[], liveIds: Set<string>): string[] {
   return ids.filter((id) => liveIds.has(id));
+}
+
+/** Same pruning for the wake generation map. */
+export function pruneWakes(
+  wakes: Record<string, number>,
+  liveIds: Set<string>
+): Record<string, number> {
+  return Object.fromEntries(Object.entries(wakes).filter(([id]) => liveIds.has(id)));
 }
 
 /** All markers on disk, for wake ranking. */

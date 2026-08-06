@@ -3,7 +3,7 @@ import { readAppState, type Comment, type AppState } from "./data.js";
 import {
   readAllMarkers,
   updateMarker,
-  pruneIds,
+  pruneWakes,
   type Marker,
 } from "./marker.js";
 
@@ -35,6 +35,8 @@ export interface WakeCandidate {
   shortID: string;
   text: string;
   sessionName: string;
+  /** The generation we are waking for, recorded so a re-press wakes again. */
+  requestedAt: number;
 }
 
 /** Comments eligible to wake this session right now. */
@@ -42,7 +44,7 @@ export function selectWakeCandidates(
   state: AppState,
   marker: Marker | null
 ): WakeCandidate[] {
-  const already = new Set(marker?.wakedIds ?? []);
+  const wokeFor = marker?.wakedAt ?? {};
   const sessionsById = new Map(state.sessions.map((s) => [s.id.toUpperCase(), s]));
 
   return state.comments
@@ -54,7 +56,9 @@ export function selectWakeCandidates(
         // backoff re-read.
         !c.isDeleted &&
         c.status === "handedOff" &&
-        !already.has(c.id)
+        // Compare generations, not bare ids: pressing the wake button again on
+        // the same comment sets a newer wakeRequestedAt and must wake again.
+        (c.wakeRequestedAt?.getTime() ?? 0) > (wokeFor[c.id] ?? -1)
     )
     .sort(
       (a, b) =>
@@ -66,6 +70,7 @@ export function selectWakeCandidates(
       text: c.commentText,
       sessionName:
         sessionsById.get(c.sessionID.toUpperCase())?.name ?? "Unknown session",
+      requestedAt: c.wakeRequestedAt?.getTime() ?? 0,
     }));
 }
 
@@ -196,8 +201,11 @@ export async function runWake(
   if (includedIds.length === 0) return null;
 
   const liveIds = new Set(second.comments.filter((c) => !c.isDeleted).map((c) => c.id));
+  const generations = new Map(stillEligible.map((c) => [c.id, c.requestedAt]));
   await updateMarker(claudeSessionId, (m) => {
-    m.wakedIds = pruneIds([...new Set([...m.wakedIds, ...includedIds])], liveIds);
+    const next = { ...m.wakedAt };
+    for (const id of includedIds) next[id] = generations.get(id) ?? Date.now();
+    m.wakedAt = pruneWakes(next, liveIds);
     m.lastActivity = new Date().toISOString();
   });
 
@@ -229,13 +237,18 @@ export function selectQueueComments(
   );
 
   return state.comments
-    .filter(
-      (c) =>
-        !c.isDeleted &&
-        (c.status === "open" || c.status === "handedOff") &&
-        !delivered.has(c.id) &&
-        (c.sessionID.toUpperCase() === target ||
-          inboxIds.has(c.sessionID.toUpperCase()))
-    )
+    .filter((c) => {
+      if (c.isDeleted || delivered.has(c.id)) return false;
+      // inProgress is included so a comment whose claiming agent died is not
+      // stranded outside every delivery path.
+      if (!["open", "handedOff", "inProgress"].includes(c.status)) return false;
+      const inScope =
+        c.sessionID.toUpperCase() === target ||
+        inboxIds.has(c.sessionID.toUpperCase());
+      // A wake-flagged comment reaches the queue wherever it lives: the wake
+      // path is session-independent, so its safety net has to be too, or a
+      // comment in a manual session with nobody awake is stranded forever.
+      return inScope || c.wakeRequestedAt != null;
+    })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
