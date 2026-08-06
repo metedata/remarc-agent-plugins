@@ -680,11 +680,16 @@ function formatComments(comments, state, maxChars) {
     if (session) entry.push(`Session: ${wrapUntrusted(session.name)}`);
     entry.push(`Status: ${c.status}`);
     entry.push("");
-    const block = entry.join("\n");
-    if (used + block.length > maxChars) break;
+    let block = entry.join("\n");
+    if (used + block.length > maxChars) {
+      if (includedIds.length > 0) break;
+      const room = Math.max(200, maxChars - used - 200);
+      block = block.slice(0, room) + "\n[truncated - fetch the full comment with remarc_get_comment]\n";
+    }
     lines.push(block);
     used += block.length;
     includedIds.push(c.id);
+    if (used >= maxChars) break;
   }
   if (includedIds.length === 0) return { text: "", includedIds: [] };
   return { text: lines.join("\n"), includedIds };
@@ -928,6 +933,7 @@ function selectQueueComments(state, remarcSessionId, marker) {
 var EMPTY = { stdout: "{}", exitCode: 0 };
 var MAX_QUEUE_COMMENTS = 20;
 var MAX_QUEUE_CHARS = 9e3;
+var MAX_QUEUE_CHARS_PORTABLE = 4e3;
 async function runHook(event, rawInput) {
   try {
     let input;
@@ -1078,7 +1084,8 @@ async function onPromptSubmit(input) {
     return { envelope: {} };
   }
   const selected = eligible.slice(0, MAX_QUEUE_COMMENTS);
-  const context = formatComments(selected, state, MAX_QUEUE_CHARS);
+  const budget = isStrictHarness(input) ? MAX_QUEUE_CHARS_PORTABLE : MAX_QUEUE_CHARS;
+  const context = formatComments(selected, state, budget);
   if (!context.text) {
     await touchMarker(input.session_id);
     return { envelope: {} };

@@ -53,6 +53,13 @@ const EMPTY: HookResult = { stdout: "{}", exitCode: 0 };
  * marked as having received comments it never saw. */
 const MAX_QUEUE_COMMENTS = 20;
 const MAX_QUEUE_CHARS = 9000;
+/**
+ * Codex spills oversized additionalContext to a head/tail preview at a much
+ * lower threshold (~2,500 tokens) than Claude Code's 10,000 characters. Sending
+ * 9,000 there would hide middle comments while still recording them as
+ * delivered, so they would never be shown again.
+ */
+const MAX_QUEUE_CHARS_PORTABLE = 4000;
 
 export async function runHook(event: string, rawInput: string): Promise<HookResult> {
   try {
@@ -264,6 +271,7 @@ async function onFileChanged(input: {
 async function onPromptSubmit(input: {
   session_id?: string;
   prompt?: string;
+  transcript_path?: string;
 }): Promise<{ envelope: Envelope; commit?: () => Promise<void> }> {
   if (!input.session_id) return { envelope: {} };
   const marker = await readMarker(input.session_id);
@@ -280,7 +288,8 @@ async function onPromptSubmit(input: {
   }
 
   const selected = eligible.slice(0, MAX_QUEUE_COMMENTS);
-  const context = formatComments(selected, state, MAX_QUEUE_CHARS);
+  const budget = isStrictHarness(input) ? MAX_QUEUE_CHARS_PORTABLE : MAX_QUEUE_CHARS;
+  const context = formatComments(selected, state, budget);
   if (!context.text) {
     await touchMarker(input.session_id);
     return { envelope: {} };

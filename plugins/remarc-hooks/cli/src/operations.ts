@@ -232,11 +232,21 @@ export function formatComments(
     entry.push(`Status: ${c.status}`);
     entry.push("");
 
-    const block = entry.join("\n");
-    if (used + block.length > maxChars) break;
+    let block = entry.join("\n");
+    if (used + block.length > maxChars) {
+      if (includedIds.length > 0) break;
+      // Nothing fits yet and this is the newest comment: truncate rather than
+      // emit nothing. Selection is newest-first, so skipping it would block
+      // this comment and every older one on every future prompt.
+      const room = Math.max(200, maxChars - used - 200);
+      block =
+        block.slice(0, room) +
+        "\n[truncated - fetch the full comment with remarc_get_comment]\n";
+    }
     lines.push(block);
     used += block.length;
     includedIds.push(c.id);
+    if (used >= maxChars) break;
   }
 
   if (includedIds.length === 0) return { text: "", includedIds: [] };
