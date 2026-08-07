@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "remarc",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Read, address, and resolve Remarc comments from Claude Code.",
   "author": { "name": "Mete Polat", "email": "metepolat.a@gmail.com" },
   "homepage": "https://remarc.app",
