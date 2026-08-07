@@ -23,6 +23,7 @@ import {
   updateMarker,
   pruneIds,
   removeMarker,
+  pruneDeadMarkers,
 } from "./marker.js";
 import { runWake, selectQueueComments } from "./wake.js";
 
@@ -152,6 +153,12 @@ async function onSessionStart(input: {
 }): Promise<Envelope> {
   if (input.agent_type || !input.session_id) return {};
   const source = input.source ?? "startup";
+
+  // Sweep here because this is the one event every session runs, including the
+  // non-interactive `claude plugin list --json` invocations that create the
+  // dead markers in the first place - so whatever generates the garbage also
+  // clears it. Never allowed to fail a session start over housekeeping.
+  await pruneDeadMarkers(input.session_id).catch(() => {});
 
   // Watch registration is deliberately independent of pairing. Claude Code
   // only registers dynamic watch paths when SessionStart output is non-empty,

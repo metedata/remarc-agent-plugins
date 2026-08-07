@@ -14,6 +14,7 @@ var marker_exports = {};
 __export(marker_exports, {
   legacyMarkerPath: () => legacyMarkerPath,
   markerPath: () => markerPath,
+  pruneDeadMarkers: () => pruneDeadMarkers,
   pruneIds: () => pruneIds,
   pruneWakes: () => pruneWakes,
   readAllMarkers: () => readAllMarkers,
@@ -184,6 +185,21 @@ function pruneIds(ids, liveIds) {
 function pruneWakes(wakes, liveIds) {
   return Object.fromEntries(Object.entries(wakes).filter(([id]) => liveIds.has(id)));
 }
+async function pruneDeadMarkers(keepSessionId, now = Date.now()) {
+  const removed = [];
+  for (const { claudeSessionId, marker } of await readAllMarkers()) {
+    if (keepSessionId && claudeSessionId === keepSessionId) continue;
+    const stamped = marker.lastActivity ? Date.parse(marker.lastActivity) : NaN;
+    const age = Number.isNaN(stamped) ? Infinity : now - stamped;
+    if (age < 0) continue;
+    const transcriptGone = typeof marker.transcriptPath === "string" && marker.transcriptPath !== "" && !existsSync2(marker.transcriptPath);
+    if (age > MARKER_MAX_AGE_MS || transcriptGone && age > TRANSCRIPT_GRACE_MS) {
+      await removeMarker(claudeSessionId);
+      removed.push(claudeSessionId);
+    }
+  }
+  return removed;
+}
 async function readAllMarkers() {
   const dir = markersDir();
   if (!existsSync2(dir)) return [];
@@ -198,12 +214,14 @@ async function readAllMarkers() {
   }
   return out;
 }
-var LOCK_TIMEOUT_MS2, LOCK_POLL_MS2, LOCK_STALE_MS2;
+var LOCK_TIMEOUT_MS2, LOCK_POLL_MS2, LOCK_STALE_MS2, MARKER_MAX_AGE_MS, TRANSCRIPT_GRACE_MS;
 var init_marker = __esm({
   "../../shared/marker.ts"() {
     LOCK_TIMEOUT_MS2 = 2e3;
     LOCK_POLL_MS2 = 20;
     LOCK_STALE_MS2 = 1e4;
+    MARKER_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+    TRANSCRIPT_GRACE_MS = 5 * 60 * 1e3;
   }
 });
 
@@ -991,6 +1009,8 @@ function isStrictHarness(input) {
 async function onSessionStart(input) {
   if (input.agent_type || !input.session_id) return {};
   const source = input.source ?? "startup";
+  await pruneDeadMarkers(input.session_id).catch(() => {
+  });
   const strict = isStrictHarness(input);
   const base = strict ? {} : {
     hookSpecificOutput: {
