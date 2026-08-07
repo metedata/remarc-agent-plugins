@@ -121,9 +121,15 @@ future identification or the user asks.
 ### `remarc_create_session`
 
 Use when the user asks to start a Remarc session during an existing
-conversation. Provide a short session name and the current Claude Code session
-ID from session context. The new session becomes active, and future Remarc
-comments can attach to subsequent messages through the Remarc integration.
+conversation. Provide a short session name and your own agent session ID from
+session context. The new session becomes active, and future Remarc comments can
+attach to subsequent messages through the Remarc integration.
+
+Always pass `harness`: `"codex"` if you are Codex, `"claudeCode"` if you are
+Claude Code. The server cannot work this out. One MCP server answers whichever
+agent connects to it, so a Codex agent running inside Claude Code reaches
+Claude Code's server and is labelled Claude Code unless you say otherwise. The
+session shows that label in Remarc.
 
 Do not create a new session just because the user asks to inspect, summarize, or
 address existing comments. List sessions first and use the matching session. If

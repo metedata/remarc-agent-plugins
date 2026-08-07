@@ -533,12 +533,18 @@ export function registerTools(server: McpServer): void {
   // 7. remarc_create_session — create a new session mid-chat
   server.registerTool("remarc_create_session", {
     description:
-      "Create a new Remarc session and link it to this Claude Code session. Use when the user asks to start a Remarc session mid-conversation. Comments made in Remarc will be attached to subsequent messages.",
+      "Create a new Remarc session and link it to this agent session. Use when the user asks to start a Remarc session mid-conversation. Comments made in Remarc will be attached to subsequent messages.",
     inputSchema: {
       name: z.string().describe("Session name (e.g. directory name or task description)."),
-      claude_session_id: z.string().describe("Your Claude Code session ID (provided in your session context)."),
+      claude_session_id: z.string().describe("Your agent session ID (provided in your session context)."),
+      harness: z
+        .enum(["claudeCode", "codex"])
+        .optional()
+        .describe(
+          "Which agent you are. Pass this - the server cannot tell. One MCP server serves whichever agent connects to it, so a Codex agent running inside Claude Code reaches Claude Code's server and would otherwise be labelled Claude Code."
+        ),
     },
-  }, async ({ name, claude_session_id }) => {
+  }, async ({ name, claude_session_id, harness }) => {
     try {
       const created = await withDocument((state) => {
       const MAX_ACTIVE_SESSIONS = 8;
@@ -591,10 +597,13 @@ export function registerTools(server: McpServer): void {
         deletedAt: null,
         isAutoDismissed: false,
         autoDismissedAt: null,
-        // The harness that actually created it. `claudeCodeSessionId` keeps its
-        // name for schema compatibility but holds whichever harness's session
-        // id this is - the marker filename uses the same value.
-        origin: currentHarness(),
+        // The caller's own answer wins, because only the caller knows. Server
+        // detection reads the process it was launched in, which is the harness
+        // that *started the server*, not the agent on the other end of the
+        // connection - and those differ whenever one agent runs inside another.
+        // `claudeCodeSessionId` keeps its name for schema compatibility but
+        // holds whichever harness's session id this is.
+        origin: harness ?? currentHarness(),
         claudeCodeSessionId: claude_session_id,
         unknownFields: {},
       });

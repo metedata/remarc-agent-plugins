@@ -639,7 +639,7 @@ async function createSession(input) {
       deletedAt: null,
       isAutoDismissed: false,
       autoDismissedAt: null,
-      origin: "claudeCode",
+      origin: input.harness ?? "claudeCode",
       claudeCodeSessionId: input.claudeSessionId,
       unknownFields: {}
     });
@@ -721,7 +721,7 @@ ${text}
 <<<END-${token}>>>`;
 }
 async function windDown(input) {
-  const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "autoDelete");
+  const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "keep");
   await withDocument((state) => {
     const sessionIdUpper = input.remarcSessionId.toUpperCase();
     const sessionIdx = state.sessions.findIndex((s) => s.id.toUpperCase() === sessionIdUpper);
@@ -1049,7 +1049,8 @@ async function onSessionStart(input) {
     const result = await createSession({
       name,
       claudeSessionId: input.session_id,
-      source
+      source,
+      harness: strict ? "codex" : "claudeCode"
     });
     await writeMarker(input.session_id, {
       remarcSessionId: result.remarcSessionId,
@@ -1145,11 +1146,13 @@ async function onPromptSubmit(input) {
 }
 async function onSessionEnd(input) {
   if (!input.session_id) return {};
+  if (input.reason === "resume") return {};
   const marker = await readMarker(input.session_id);
-  if (!marker?.remarcSessionId) return {};
-  try {
-    await windDown({ remarcSessionId: marker.remarcSessionId });
-  } catch {
+  if (marker?.remarcSessionId && input.reason === "clear") {
+    try {
+      await windDown({ remarcSessionId: marker.remarcSessionId });
+    } catch {
+    }
   }
   await removeMarker(input.session_id);
   return {};
