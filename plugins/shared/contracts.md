@@ -25,6 +25,7 @@ These keys are read by the plugin via the `defaults read` shell-out. The app own
 | `status` | app, MCP | `open` → `handedOff` → `inProgress` → `resolved`. Queue delivery selects `open`, `handedOff` and `inProgress`; the wake path only ever considers `handedOff`. |
 | `wakeRequestedAt` | app only | Apple-epoch timestamp set when the user presses "Send instantly & save". Never cleared. The wake hook treats it as a generation: it wakes when the value is newer than the `wakedAt` entry for that comment, so pressing the button again wakes again. |
 | `isDeleted` | app, MCP | Soft delete. The wake path must exclude deleted comments at selection **and** after its backoff re-read — a deleted comment keeps its `wakeRequestedAt`, and full-UUID MCP lookup returns deleted records. |
+| `sessionID` | app, MCP | The delivery address, for both paths. A session's agent receives that session's comments and no others — not the Inbox's, not another session's. Inbox comments reach an agent only when the user files them to a session or asks for them through `remarc_list_comments`. Earlier builds folded the Inbox into every paired session's queue behind an `includeInboxInSessionContext` preference; that key is now read by nobody, and a value left over from an older build must not resurrect the behaviour. |
 
 ## Unknown-field preservation (required)
 

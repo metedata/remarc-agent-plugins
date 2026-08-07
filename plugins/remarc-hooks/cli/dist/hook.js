@@ -937,16 +937,13 @@ async function readMarkerSafe(claudeSessionId) {
     return null;
   }
 }
-function selectQueueComments(state, remarcSessionId, marker, includeInbox = true) {
+function selectQueueComments(state, remarcSessionId, marker) {
   const delivered = new Set(marker?.deliveredIds ?? []);
   const target = remarcSessionId.toUpperCase();
-  const inboxIds = includeInbox ? new Set(
-    state.sessions.filter((s) => !s.isDeleted && s.name.trim().toLowerCase() === "inbox").map((s) => s.id.toUpperCase())
-  ) : /* @__PURE__ */ new Set();
   return state.comments.filter((c) => {
     if (c.isDeleted || delivered.has(c.id)) return false;
     if (!["open", "handedOff", "inProgress"].includes(c.status)) return false;
-    return c.sessionID.toUpperCase() === target || inboxIds.has(c.sessionID.toUpperCase());
+    return c.sessionID.toUpperCase() === target;
   }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
@@ -1111,13 +1108,7 @@ async function onPromptSubmit(input) {
   if (!marker?.remarcSessionId) return { envelope: {} };
   const state = await readAppState();
   if (!state) return { envelope: {} };
-  const includeInbox = await readBoolDefault("includeInboxInSessionContext") ?? true;
-  const eligible = selectQueueComments(
-    state,
-    marker.remarcSessionId,
-    marker,
-    includeInbox
-  );
+  const eligible = selectQueueComments(state, marker.remarcSessionId, marker);
   if (eligible.length === 0) {
     await touchMarker(input.session_id);
     return { envelope: {} };
