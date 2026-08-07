@@ -21717,6 +21717,8 @@ async function writeMarker(claudeSessionId, m) {
     Object.assign(cur, m);
   });
 }
+var MARKER_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+var TRANSCRIPT_GRACE_MS = 5 * 60 * 1e3;
 
 // src/tools.ts
 import { randomUUID } from "node:crypto";

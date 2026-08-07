@@ -32,6 +32,7 @@ vi.mock("./marker.js", () => ({
   removeMarker: vi.fn(async () => {}),
   pruneIds: (ids: string[]) => ids,
   readAllMarkers: vi.fn(async () => []),
+  pruneDeadMarkers: vi.fn(async () => []),
 }));
 vi.mock("./data.js", async () => {
   const actual = await vi.importActual<typeof import("./data.js")>("./data.js");

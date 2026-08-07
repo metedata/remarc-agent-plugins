@@ -264,6 +264,57 @@ export function pruneWakes(
   return Object.fromEntries(Object.entries(wakes).filter(([id]) => liveIds.has(id)));
 }
 
+/** A session gone this long is not coming back, transcript or not. */
+const MARKER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/**
+ * How long a marker may name a transcript that is not on disk yet. Claude Code
+ * reports the path at SessionStart, before the file necessarily exists, so a
+ * young marker naming a missing transcript is a session still waking up.
+ */
+const TRANSCRIPT_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * Delete markers for sessions that ended without a SessionEnd hook.
+ *
+ * The directory is otherwise append-only in practice, and one writer never
+ * cleans up after itself: `claude plugin list --json` - which the Remarc app
+ * runs at launch and from Preferences to detect the plugin - starts a session,
+ * gets a marker naming a transcript it exits too fast to create, and never
+ * fires SessionEnd. One user accumulated 13 of these in a few minutes.
+ *
+ * Two ways to be dead, both needed: a named transcript that does not exist
+ * (past the grace window) catches those instantly, and sheer age catches real
+ * sessions killed hard enough to skip SessionEnd, whose transcripts do exist.
+ *
+ * `keepSessionId` is never pruned - the caller is usually mid-write on it.
+ */
+export async function pruneDeadMarkers(
+  keepSessionId?: string,
+  now: number = Date.now()
+): Promise<string[]> {
+  const removed: string[] = [];
+  for (const { claudeSessionId, marker } of await readAllMarkers()) {
+    if (keepSessionId && claudeSessionId === keepSessionId) continue;
+
+    const stamped = marker.lastActivity ? Date.parse(marker.lastActivity) : NaN;
+    // No usable timestamp means nothing can vouch for it; treat as ancient
+    // rather than immortal.
+    const age = Number.isNaN(stamped) ? Infinity : now - stamped;
+    if (age < 0) continue; // clock skew: a future stamp is not evidence of death
+
+    const transcriptGone =
+      typeof marker.transcriptPath === "string" &&
+      marker.transcriptPath !== "" &&
+      !existsSync(marker.transcriptPath);
+
+    if (age > MARKER_MAX_AGE_MS || (transcriptGone && age > TRANSCRIPT_GRACE_MS)) {
+      await removeMarker(claudeSessionId);
+      removed.push(claudeSessionId);
+    }
+  }
+  return removed;
+}
+
 /** All markers on disk, for wake ranking. */
 export async function readAllMarkers(): Promise<Array<{ claudeSessionId: string; marker: Marker }>> {
   const dir = markersDir();
