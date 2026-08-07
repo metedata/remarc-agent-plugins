@@ -269,20 +269,60 @@ describe("file-changed: wake", () => {
 describe("session-end", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("winds down and removes the marker", async () => {
+  it("winds down only when the user cleared the conversation", async () => {
+    // `clear` is the one ending that means "done with this work".
     const { runHook } = await import("./hook.js");
-    await runHook("session-end", JSON.stringify({ session_id: "claude-abc" }));
+    await runHook(
+      "session-end",
+      JSON.stringify({ session_id: "claude-abc", reason: "clear" })
+    );
     const { windDown } = await import("./operations.js");
     const { removeMarker } = await import("./marker.js");
     expect(windDown).toHaveBeenCalledWith({ remarcSessionId: "ABC-123" });
     expect(removeMarker).toHaveBeenCalledWith("claude-abc");
   });
 
+  it("unlinks without winding down when the user just quits", async () => {
+    // Quitting means the agent stopped, not that the comments were handled.
+    // Winding down here destroyed the session and moved live comments to the
+    // Inbox, where nothing delivers them.
+    const { runHook } = await import("./hook.js");
+    for (const reason of ["prompt_input_exit", "logout", "other", undefined]) {
+      vi.clearAllMocks();
+      await runHook(
+        "session-end",
+        JSON.stringify({ session_id: "claude-abc", reason })
+      );
+      const { windDown } = await import("./operations.js");
+      const { removeMarker } = await import("./marker.js");
+      expect(windDown, `reason=${reason}`).not.toHaveBeenCalled();
+      expect(removeMarker, `reason=${reason}`).toHaveBeenCalledWith("claude-abc");
+    }
+  });
+
+  it("leaves the marker alone when the session is coming back", async () => {
+    // `resume` fires on compaction and explicit resume - the session keeps its
+    // id and returns. Removing the marker there dropped the pairing mid-
+    // conversation, and winding down destroyed the session it pointed at.
+    const { runHook } = await import("./hook.js");
+    await runHook(
+      "session-end",
+      JSON.stringify({ session_id: "claude-abc", reason: "resume" })
+    );
+    const { windDown } = await import("./operations.js");
+    const { removeMarker } = await import("./marker.js");
+    expect(windDown).not.toHaveBeenCalled();
+    expect(removeMarker).not.toHaveBeenCalled();
+  });
+
   it("survives a wind-down failure and still removes the marker", async () => {
     const { windDown } = await import("./operations.js");
     vi.mocked(windDown).mockRejectedValueOnce(new Error("nope"));
     const { runHook } = await import("./hook.js");
-    const res = await runHook("session-end", JSON.stringify({ session_id: "claude-abc" }));
+    const res = await runHook(
+      "session-end",
+      JSON.stringify({ session_id: "claude-abc", reason: "clear" })
+    );
     expect(res.exitCode).toBe(0);
     const { removeMarker } = await import("./marker.js");
     expect(removeMarker).toHaveBeenCalled();

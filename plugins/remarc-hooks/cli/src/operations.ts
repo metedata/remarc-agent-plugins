@@ -50,6 +50,12 @@ export interface CreateSessionInput {
   name: string;
   claudeSessionId: string;
   source: string; // "startup" | "resume" | (other ignored)
+  /**
+   * The harness this session belongs to. The hook knows it for certain - it is
+   * the process the harness itself launched - so it passes it rather than
+   * leaving anyone downstream to infer it.
+   */
+  harness?: "claudeCode" | "codex";
 }
 
 export interface CreateSessionResult {
@@ -119,7 +125,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
       deletedAt: null,
       isAutoDismissed: false,
       autoDismissedAt: null,
-      origin: "claudeCode",
+      origin: input.harness ?? "claudeCode",
       claudeCodeSessionId: input.claudeSessionId,
       unknownFields: {},
     });
@@ -268,7 +274,11 @@ export async function windDown(input: WindDownInput): Promise<void> {
   // Read the preference BEFORE opening the transaction: it shells out to
   // `defaults`, and holding the document lock across a subprocess would block
   // every other writer for the duration.
-  const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "autoDelete");
+  // Keeping is the default because the alternative loses data: `autoDelete`
+  // soft-deletes the session *and every comment on it*, resolved history
+  // included, and it ran on every kind of session ending. Destroying a user's
+  // comments is not a cleanup default anyone opts into knowingly.
+  const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "keep");
 
   await withDocument((state) => {
   const sessionIdUpper = input.remarcSessionId.toUpperCase();

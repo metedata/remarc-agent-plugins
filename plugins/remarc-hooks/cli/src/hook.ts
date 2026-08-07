@@ -222,6 +222,7 @@ async function onSessionStart(input: {
       name,
       claudeSessionId: input.session_id,
       source,
+      harness: strict ? "codex" : "claudeCode",
     });
     await writeMarker(input.session_id, {
       remarcSessionId: result.remarcSessionId,
@@ -347,14 +348,42 @@ async function onPromptSubmit(input: {
   };
 }
 
-async function onSessionEnd(input: { session_id?: string }): Promise<Envelope> {
+/**
+ * SessionEnd: unlink by default, wind down only when the work is actually over.
+ *
+ * This used to wind down unconditionally, which read every kind of ending as
+ * "the user is finished with this session". Two of them are not:
+ *
+ * - `resume` fires when a session ends *in order to come back* - context
+ *   compaction, or an explicit resume. Tearing down there destroyed the paired
+ *   session mid-conversation, and since a resumed session keeps its id, the
+ *   agent came back to a marker pointing at a session that no longer existed.
+ * - quitting (`prompt_input_exit`, `logout`, `other`) means the agent stopped,
+ *   not that the comments were dealt with. The Remarc session and its comments
+ *   outlive the agent; only the pairing ends.
+ *
+ * `clear` is the one ending that means "done with this": the user deliberately
+ * wiped the conversation, so the configured wind-down applies. Codex sends no
+ * reason at all, which falls through to unlinking - the safe side, since
+ * nothing is destroyed and the session can be re-paired.
+ */
+async function onSessionEnd(input: {
+  session_id?: string;
+  reason?: string;
+}): Promise<Envelope> {
   if (!input.session_id) return {};
+
+  // Keep the marker: this session is coming back, and the marker is what
+  // carries the pairing across the gap.
+  if (input.reason === "resume") return {};
+
   const marker = await readMarker(input.session_id);
-  if (!marker?.remarcSessionId) return {};
-  try {
-    await windDown({ remarcSessionId: marker.remarcSessionId });
-  } catch {
-    /* swallow — observability only */
+  if (marker?.remarcSessionId && input.reason === "clear") {
+    try {
+      await windDown({ remarcSessionId: marker.remarcSessionId });
+    } catch {
+      /* swallow — observability only */
+    }
   }
   await removeMarker(input.session_id);
   return {};
