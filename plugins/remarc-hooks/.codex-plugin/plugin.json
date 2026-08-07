@@ -1,6 +1,6 @@
 {
   "name": "remarc-hooks",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Session hooks for Remarc. Injects open comments at session start and before each prompt.",
   "keywords": ["remarc", "hooks"],
   "hooks": "./hooks/codex-hooks.json",
