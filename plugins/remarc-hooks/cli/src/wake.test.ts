@@ -104,14 +104,31 @@ describe("selectWakeCandidates", () => {
     expect(selectWakeCandidates(s, marker({ wakedAt: { A: 9000 } }))).toEqual([]);
   });
 
-  it("treats a missing marker as no history", () => {
+  it("wakes for nothing when this agent is not paired to a session", () => {
+    // No marker means no pairing, and an unpaired agent is not a wake target.
     const s = state([comment({ id: "A" })]);
-    expect(selectWakeCandidates(s, null).map((c) => c.id)).toEqual(["A"]);
+    expect(selectWakeCandidates(s, null)).toEqual([]);
+    expect(selectWakeCandidates(s, marker({ remarcSessionId: "" }))).toEqual([]);
+  });
+
+  it("ignores comments belonging to a different session", () => {
+    // The stampede this replaces: one instant send used to wake every live
+    // agent, each spending context before the claim picked a single winner.
+    const s = state([
+      comment({ id: "MINE", sessionID: "S1" }),
+      comment({ id: "THEIRS", sessionID: "S2" }),
+    ]);
+    expect(selectWakeCandidates(s, marker()).map((c) => c.id)).toEqual(["MINE"]);
+  });
+
+  it("does not wake for Inbox comments, which belong to no agent", () => {
+    const s = state([comment({ id: "A", sessionID: "S2" })]);
+    expect(selectWakeCandidates(s, marker())).toEqual([]);
   });
 
   it("resolves the session name for the payload", () => {
-    const s = state([comment({ id: "A", sessionID: "S2" })]);
-    expect(selectWakeCandidates(s, marker())[0].sessionName).toBe("Inbox");
+    const s = state([comment({ id: "A" })]);
+    expect(selectWakeCandidates(s, marker())[0].sessionName).toBe("Proj");
   });
 });
 
@@ -211,14 +228,15 @@ describe("selectQueueComments", () => {
     expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
   });
 
-  it("delivers a wake-flagged comment from any session", () => {
-    // The wake path is session-independent, so its fallback has to be too:
-    // otherwise a wake comment in a manual session with nobody awake is
-    // stranded forever.
+  it("keeps another session's wake-flagged comment out of this queue", () => {
+    // This used to be delivered everywhere, as a safety net for a wake path
+    // that fired session-independently. Wake now targets the paired session
+    // only, so the net caught nothing and leaked one session's comments into
+    // every other session's context instead.
     const s = state([
       comment({ id: "A", sessionID: "S9", status: "handedOff", wakeRequestedAt: new Date(2000) }),
     ]);
-    expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
+    expect(selectQueueComments(s, "S1", marker())).toEqual([]);
   });
 
   it("includes inProgress so a dead claimant does not strand a comment", () => {
