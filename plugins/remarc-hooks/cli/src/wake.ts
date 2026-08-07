@@ -269,22 +269,22 @@ async function readMarkerSafe(claudeSessionId: string): Promise<Marker | null> {
   }
 }
 
-/** Comments eligible for queue (context) delivery to this session. */
+/**
+ * Comments eligible for queue (context) delivery to this session.
+ *
+ * This session's own comments, and nothing else. Inbox comments used to be
+ * folded in behind a preference: they belong to no agent, so every paired
+ * session took its own copy, and the same note was read by as many agents as
+ * the user happened to have open. An Inbox comment now waits to be filed to a
+ * session, or for someone to ask an agent to look through `remarc_list_comments`.
+ */
 export function selectQueueComments(
   state: AppState,
   remarcSessionId: string,
-  marker: Marker | null,
-  includeInbox = true
+  marker: Marker | null
 ): Comment[] {
   const delivered = new Set(marker?.deliveredIds ?? []);
   const target = remarcSessionId.toUpperCase();
-  const inboxIds = includeInbox
-    ? new Set(
-        state.sessions
-          .filter((s) => !s.isDeleted && s.name.trim().toLowerCase() === "inbox")
-          .map((s) => s.id.toUpperCase())
-      )
-    : new Set<string>();
 
   return state.comments
     .filter((c) => {
@@ -297,10 +297,7 @@ export function selectQueueComments(
       // or one left in a manual session was stranded. Now that wake only ever
       // targets the paired session, that clause just leaked one session's
       // comments into every other session's context.
-      return (
-        c.sessionID.toUpperCase() === target ||
-        inboxIds.has(c.sessionID.toUpperCase())
-      );
+      return c.sessionID.toUpperCase() === target;
     })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }

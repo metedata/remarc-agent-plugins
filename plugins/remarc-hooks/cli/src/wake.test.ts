@@ -202,25 +202,32 @@ describe("sentinelWrap", () => {
 });
 
 describe("selectQueueComments", () => {
-  it("covers the paired session and the Inbox", () => {
-    // The reason comments had to be hand-carried: delivery only read the
-    // freshly created paired session, which is empty.
+  it("covers the paired session and nothing else", () => {
+    // S2 is the Inbox and S3 is someone else's session. Both used to arrive
+    // here - the Inbox by preference, another session's only if it carried a
+    // wake flag - and both are now somebody else's business.
     const s = state([
       comment({ id: "A", sessionID: "S1", status: "open", wakeRequestedAt: null }),
       comment({ id: "B", sessionID: "S2", status: "open", wakeRequestedAt: null }),
       comment({ id: "C", sessionID: "S3", status: "open", wakeRequestedAt: null }),
     ]);
     const got = selectQueueComments(s, "S1", marker());
-    expect(got.map((c) => c.id).sort()).toEqual(["A", "B"]);
+    expect(got.map((c) => c.id)).toEqual(["A"]);
   });
 
-  it("can be told to leave Inbox comments out", () => {
+  it("leaves Inbox comments out, with no way to opt back in", () => {
+    // Inbox comments belong to no agent, so folding them in meant every paired
+    // session took its own copy of the same note. There is no preference for
+    // this any more: an Inbox comment waits to be filed to a session, or for
+    // someone to ask an agent to look through remarc_list_comments.
     const s = state([
       comment({ id: "A", sessionID: "S1", status: "open", wakeRequestedAt: null }),
       comment({ id: "B", sessionID: "S2", status: "open", wakeRequestedAt: null }),
     ]);
-    expect(selectQueueComments(s, "S1", marker(), false).map((c) => c.id)).toEqual(["A"]);
-    expect(selectQueueComments(s, "S1", marker(), true).map((c) => c.id).sort()).toEqual(["A", "B"]);
+    expect(selectQueueComments(s, "S1", marker()).map((c) => c.id)).toEqual(["A"]);
+    // ...and from the Inbox's own side, nobody is delivered to.
+    expect(selectQueueComments(s, "S2", marker({ remarcSessionId: "S2" })).map((c) => c.id))
+      .toEqual(["B"]);
   });
 
   it("includes handedOff comments so a missed wake still arrives", () => {

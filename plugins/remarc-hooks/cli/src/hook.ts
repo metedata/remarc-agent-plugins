@@ -304,15 +304,7 @@ async function onPromptSubmit(input: {
   const state = await readAppState();
   if (!state) return { envelope: {} };
 
-  // Respects the Preferences toggle; absent means the documented default.
-  const includeInbox =
-    (await readBoolDefault("includeInboxInSessionContext")) ?? true;
-  const eligible = selectQueueComments(
-    state,
-    marker.remarcSessionId,
-    marker,
-    includeInbox
-  );
+  const eligible = selectQueueComments(state, marker.remarcSessionId, marker);
   if (eligible.length === 0) {
     await touchMarker(input.session_id);
     return { envelope: {} };
