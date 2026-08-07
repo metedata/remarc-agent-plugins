@@ -18,6 +18,7 @@ import {
 } from "./data.js";
 import { notifyRemarcReload } from "./notify.js";
 import { writeMarker } from "./marker.js";
+import { currentHarness } from "./harness.js";
 import { randomUUID } from "node:crypto";
 
 // ---------------------------------------------------------------------------
@@ -590,7 +591,10 @@ export function registerTools(server: McpServer): void {
         deletedAt: null,
         isAutoDismissed: false,
         autoDismissedAt: null,
-        origin: "claudeCode",
+        // The harness that actually created it. `claudeCodeSessionId` keeps its
+        // name for schema compatibility but holds whichever harness's session
+        // id this is - the marker filename uses the same value.
+        origin: currentHarness(),
         claudeCodeSessionId: claude_session_id,
         unknownFields: {},
       });

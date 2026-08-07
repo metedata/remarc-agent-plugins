@@ -21720,6 +21720,23 @@ async function writeMarker(claudeSessionId, m) {
 var MARKER_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 var TRANSCRIPT_GRACE_MS = 5 * 60 * 1e3;
 
+// src/harness.ts
+var declared = null;
+function setHarnessFromArgv(argv) {
+  const i = argv.indexOf("--harness");
+  const value = i >= 0 ? argv[i + 1] : void 0;
+  declared = value === "codex" || value === "claudeCode" ? value : null;
+}
+function currentHarness(env = process.env) {
+  if (declared) return declared;
+  if (env.CLAUDE_PLUGIN_ROOT) return "claudeCode";
+  const haystack = [env.CODEX_HOME ?? "", process.cwd(), process.argv[1] ?? ""];
+  if (haystack.some((s) => s.includes(".codex") || s.includes("/codex/"))) {
+    return "codex";
+  }
+  return "claudeCode";
+}
+
 // src/tools.ts
 import { randomUUID } from "node:crypto";
 function textResult(text) {
@@ -22145,7 +22162,10 @@ Summary: ${summary}`);
           deletedAt: null,
           isAutoDismissed: false,
           autoDismissedAt: null,
-          origin: "claudeCode",
+          // The harness that actually created it. `claudeCodeSessionId` keeps its
+          // name for schema compatibility but holds whichever harness's session
+          // id this is - the marker filename uses the same value.
+          origin: currentHarness(),
           claudeCodeSessionId: claude_session_id,
           unknownFields: {}
         });
@@ -22170,6 +22190,7 @@ Summary: ${summary}`);
 }
 
 // src/index.ts
+setHarnessFromArgv(process.argv);
 var server = new McpServer(
   {
     name: "remarc",
