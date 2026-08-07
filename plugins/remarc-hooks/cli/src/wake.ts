@@ -39,17 +39,33 @@ export interface WakeCandidate {
   requestedAt: number;
 }
 
-/** Comments eligible to wake this session right now. */
+/**
+ * Comments eligible to wake this session right now.
+ *
+ * Scoped to the session this agent is paired with, and to nothing else. The
+ * earlier design matched on wake state alone, so one instant send woke every
+ * live agent on the machine at once: each one read the comment and spent
+ * context before the compare-and-set claim picked a single winner. The claim
+ * bounds the damage to one *writer*, never to one reader.
+ *
+ * An unpaired agent is therefore woken by nothing at all. That is the point -
+ * the app only offers instant send for a paired session, so a comment that can
+ * wake anything always has exactly one agent to wake.
+ */
 export function selectWakeCandidates(
   state: AppState,
   marker: Marker | null
 ): WakeCandidate[] {
+  const paired = (marker?.remarcSessionId ?? "").toUpperCase();
+  if (!paired) return [];
+
   const wokeFor = marker?.wakedAt ?? {};
   const sessionsById = new Map(state.sessions.map((s) => [s.id.toUpperCase(), s]));
 
   return state.comments
     .filter(
       (c) =>
+        c.sessionID.toUpperCase() === paired &&
         c.wakeRequestedAt != null &&
         // A deleted comment keeps its wake flag, and full-UUID MCP lookup
         // happily returns deleted records - so filter here and again after the
@@ -276,13 +292,15 @@ export function selectQueueComments(
       // inProgress is included so a comment whose claiming agent died is not
       // stranded outside every delivery path.
       if (!["open", "handedOff", "inProgress"].includes(c.status)) return false;
-      const inScope =
+      // Wake state buys a comment nothing here. It used to: while wake was
+      // session-independent, a wake-flagged comment had to reach every queue
+      // or one left in a manual session was stranded. Now that wake only ever
+      // targets the paired session, that clause just leaked one session's
+      // comments into every other session's context.
+      return (
         c.sessionID.toUpperCase() === target ||
-        inboxIds.has(c.sessionID.toUpperCase());
-      // A wake-flagged comment reaches the queue wherever it lives: the wake
-      // path is session-independent, so its safety net has to be too, or a
-      // comment in a manual session with nobody awake is stranded forever.
-      return inScope || c.wakeRequestedAt != null;
+        inboxIds.has(c.sessionID.toUpperCase())
+      );
     })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }

@@ -809,10 +809,12 @@ ${text}
   };
 }
 function selectWakeCandidates(state, marker) {
+  const paired = (marker?.remarcSessionId ?? "").toUpperCase();
+  if (!paired) return [];
   const wokeFor = marker?.wakedAt ?? {};
   const sessionsById = new Map(state.sessions.map((s) => [s.id.toUpperCase(), s]));
   return state.comments.filter(
-    (c) => c.wakeRequestedAt != null && // A deleted comment keeps its wake flag, and full-UUID MCP lookup
+    (c) => c.sessionID.toUpperCase() === paired && c.wakeRequestedAt != null && // A deleted comment keeps its wake flag, and full-UUID MCP lookup
     // happily returns deleted records - so filter here and again after the
     // backoff re-read.
     !c.isDeleted && c.status === "handedOff" && // Compare generations, not bare ids: pressing the wake button again on
@@ -944,8 +946,7 @@ function selectQueueComments(state, remarcSessionId, marker, includeInbox = true
   return state.comments.filter((c) => {
     if (c.isDeleted || delivered.has(c.id)) return false;
     if (!["open", "handedOff", "inProgress"].includes(c.status)) return false;
-    const inScope = c.sessionID.toUpperCase() === target || inboxIds.has(c.sessionID.toUpperCase());
-    return inScope || c.wakeRequestedAt != null;
+    return c.sessionID.toUpperCase() === target || inboxIds.has(c.sessionID.toUpperCase());
   }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
