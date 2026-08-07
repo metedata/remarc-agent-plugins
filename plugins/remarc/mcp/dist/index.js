@@ -21327,32 +21327,37 @@ async function acquireLock() {
   for (; ; ) {
     try {
       await mkdir(lockPath);
-      await writeFile(
-        join(lockPath, "owner.json"),
-        JSON.stringify({ pid: process.pid, at: Date.now() }),
-        "utf-8"
-      );
+      try {
+        await writeFile(
+          join(lockPath, "owner.json"),
+          JSON.stringify({ pid: process.pid, at: Date.now() }),
+          "utf-8"
+        );
+      } catch (err) {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {
+        });
+        throw err;
+      }
       return lockPath;
     } catch (err) {
       if (err?.code !== "EEXIST") throw err;
       try {
         const info = await stat(lockPath);
-        let abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
-        if (!abandoned) {
-          try {
-            const owner = JSON.parse(
-              await readFile(join(lockPath, "owner.json"), "utf-8")
-            );
-            if (typeof owner.pid === "number" && !pidAlive(owner.pid)) {
-              abandoned = true;
-            }
-          } catch {
-          }
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile(join(lockPath, "owner.json"), "utf-8")
+          );
+          abandoned = typeof owner.pid === "number" && !pidAlive(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
         }
         if (abandoned) {
-          await rm(lockPath, { recursive: true, force: true }).catch(() => {
-          });
-          continue;
+          try {
+            await rm(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+          }
         }
       } catch {
       }
@@ -21574,11 +21579,16 @@ import { randomBytes as randomBytes2 } from "node:crypto";
 function markersDir() {
   return join2(homedir2(), "Library", "Application Support", "Remarc", "claude", "markers");
 }
+function safeSessionId(claudeSessionId) {
+  const cleaned = claudeSessionId.replace(/[^A-Za-z0-9_-]/g, "");
+  if (!cleaned) throw new Error("Invalid Claude session id");
+  return cleaned.slice(0, 128);
+}
 function markerPath(claudeSessionId) {
-  return join2(markersDir(), `${claudeSessionId}.json`);
+  return join2(markersDir(), `${safeSessionId(claudeSessionId)}.json`);
 }
 function legacyMarkerPath(claudeSessionId) {
-  return `/tmp/remarc-claude-${claudeSessionId}.marker`;
+  return `/tmp/remarc-claude-${safeSessionId(claudeSessionId)}.marker`;
 }
 function emptyMarker() {
   return {
@@ -21586,6 +21596,7 @@ function emptyMarker() {
     dataFilePath: "",
     transcriptPath: null,
     lastActivity: null,
+    wakeCapable: false,
     deliveredIds: [],
     wakedAt: {}
   };
@@ -21593,12 +21604,12 @@ function emptyMarker() {
 function coerce2(raw) {
   if (raw == null || typeof raw !== "object") return null;
   const r = raw;
-  if (typeof r.remarcSessionId !== "string" || !r.remarcSessionId) return null;
   return {
-    remarcSessionId: r.remarcSessionId,
+    remarcSessionId: typeof r.remarcSessionId === "string" ? r.remarcSessionId : "",
     dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
     transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
     lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
+    wakeCapable: r.wakeCapable === true,
     deliveredIds: Array.isArray(r.deliveredIds) ? r.deliveredIds.filter((x) => typeof x === "string") : [],
     // Migrate the earlier id-array shape: treat prior wakes as generation 0.
     wakedAt: r.wakedAt && typeof r.wakedAt === "object" ? r.wakedAt : Array.isArray(r.wakedIds) ? Object.fromEntries(
@@ -21633,20 +21644,45 @@ var LOCK_STALE_MS2 = 1e4;
 function sleep2(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
+function pidAlive2(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === "EPERM";
+  }
+}
 async function acquire(lockPath) {
   const deadline = Date.now() + LOCK_TIMEOUT_MS2;
   for (; ; ) {
     try {
       await mkdir2(lockPath);
+      await writeFile2(
+        join2(lockPath, "owner.json"),
+        JSON.stringify({ pid: process.pid, at: Date.now() }),
+        "utf8"
+      ).catch(() => {
+      });
       return;
     } catch (err) {
       if (err?.code !== "EEXIST") throw err;
       try {
         const info = await stat2(lockPath);
-        if (Date.now() - info.mtimeMs > LOCK_STALE_MS2) {
-          await rm2(lockPath, { recursive: true, force: true }).catch(() => {
-          });
-          continue;
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile2(join2(lockPath, "owner.json"), "utf8")
+          );
+          abandoned = typeof owner.pid === "number" && !pidAlive2(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS2;
+        }
+        if (abandoned) {
+          try {
+            await rm2(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+          }
         }
       } catch {
         continue;
