@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   readAppState,
   writeAppState,
+  withDocument,
   getDataFilePath,
   typeLabel,
   typeIdentifier,
@@ -16,8 +17,8 @@ import {
   type Session,
 } from "./data.js";
 import { notifyRemarcReload } from "./notify.js";
+import { writeMarker } from "./marker.js";
 import { randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -310,37 +311,60 @@ export function registerTools(server: McpServer): void {
         .string()
         .optional()
         .describe("How/why the comment was resolved. Required when status is \"resolved\"."),
+      expected_status: z
+        .enum(["open", "handedOff", "inProgress", "resolved"])
+        .optional()
+        .describe(
+          "Only apply the change if the comment currently has this status. Use it to claim work another agent may also have been woken for: expected_status \"handedOff\" with status \"inProgress\" succeeds for exactly one caller."
+        ),
     },
-  }, async ({ id, status, summary }) => {
+  }, async ({ id, status, summary, expected_status }) => {
     try {
-      const state = await loadState();
-      const comment = findComment(state.comments, id);
-
-      if (!comment) {
-        return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
-      }
-
-      if (comment.status === status) {
-        return errorResult(`Comment is already ${status}.`);
-      }
-
       if (status === "resolved" && !summary) {
         return errorResult("A summary is required when resolving. Briefly describe what you did.");
       }
 
-      applyStatusUpdate(comment, status, summary, new Date());
+      // Compare-and-set inside the document transaction: the status is read and
+      // written under one lock, so two agents woken for the same comment cannot
+      // both claim it.
+      const outcome = await withDocument((state) => {
+        const comment = findComment(state.comments, id);
+        if (!comment) {
+          return { kind: "missing" as const };
+        }
+        if (expected_status != null && comment.status !== expected_status) {
+          return { kind: "conflict" as const, actual: comment.status, shortID: comment.shortID };
+        }
+        if (comment.status === status) {
+          return { kind: "noop" as const, shortID: comment.shortID };
+        }
+        applyStatusUpdate(comment, status, summary, new Date());
+        return { kind: "ok" as const, shortID: comment.shortID };
+      });
 
-      await writeAppState(state);
+      if (outcome.kind === "missing") {
+        return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
+      }
+      if (outcome.kind === "conflict") {
+        return errorResult(
+          `Comment ${outcome.shortID} is ${outcome.actual}, not ${expected_status} - another agent likely claimed it. Skip this comment.`
+        );
+      }
+      if (outcome.kind === "noop") {
+        return errorResult(`Comment is already ${status}.`);
+      }
+
       notifyRemarcReload();
 
-      const shortId = comment.shortID;
       switch (status) {
         case "resolved":
-          return textResult(`Resolved comment ${shortId}.\nSummary: ${summary}`);
+          return textResult(`Resolved comment ${outcome.shortID}.\nSummary: ${summary}`);
         case "inProgress":
-          return textResult(`Marked comment ${shortId} as in progress.`);
+          return textResult(`Marked comment ${outcome.shortID} as in progress.`);
         case "open":
-          return textResult(`Reopened comment ${shortId}.`);
+          return textResult(`Reopened comment ${outcome.shortID}.`);
+        case "handedOff":
+          return textResult(`Marked comment ${outcome.shortID} as handed off.`);
       }
     } catch (err) {
       return errorResult(String(err));
@@ -384,8 +408,7 @@ export function registerTools(server: McpServer): void {
     },
   }, async ({ status, comments: commentEntries, session_id, summary }) => {
     try {
-      const state = await loadState();
-
+      const outcome = await withDocument<{ kind: "text" | "error"; message: string; skip: boolean }>((state) => {
       // Determine which comments to update
       let targets: Array<{ comment: Comment; summary?: string }> = [];
 
@@ -394,9 +417,11 @@ export function registerTools(server: McpServer): void {
         for (const entry of commentEntries) {
           const comment = findComment(state.comments, entry.id);
           if (!comment) {
-            return errorResult(
-              `Comment not found: ${entry.id}. Use remarc_list_comments to see available comments.`
-            );
+            return {
+              kind: "error" as const,
+              message: `Comment not found: ${entry.id}. Use remarc_list_comments to see available comments.`,
+              skip: true,
+            };
           }
           targets.push({
             comment,
@@ -412,24 +437,27 @@ export function registerTools(server: McpServer): void {
             c.status !== status
         );
         if (sessionComments.length === 0) {
-          return textResult(
-            `No comments to update in session ${session_id}.`
-          );
+          return { kind: "text" as const, message: `No comments to update in session ${session_id}.`, skip: true };
         }
         targets = sessionComments.map((c) => ({ comment: c, summary }));
       } else {
-        return errorResult(
-          "Provide either a comments array or session_id to specify which comments to update."
-        );
+        return {
+          kind: "error" as const,
+          message: "Provide either a comments array or session_id to specify which comments to update.",
+          skip: true,
+        };
       }
 
       // Validate summaries for resolved status
       if (status === "resolved") {
         const missingSummary = targets.find((t) => !t.summary);
         if (missingSummary) {
-          return errorResult(
-            "A summary is required when resolving. Provide a shared summary or individual summaries for each comment."
-          );
+          return {
+            kind: "error" as const,
+            message:
+              "A summary is required when resolving. Provide a shared summary or individual summaries for each comment.",
+            skip: true,
+          };
         }
       }
 
@@ -444,11 +472,8 @@ export function registerTools(server: McpServer): void {
       }
 
       if (results.length === 0) {
-        return textResult("All targeted comments already have that status.");
+        return { kind: "text" as const, message: "All targeted comments already have that status.", skip: true };
       }
-
-      await writeAppState(state);
-      notifyRemarcReload();
 
       const verb =
         status === "resolved"
@@ -459,9 +484,17 @@ export function registerTools(server: McpServer): void {
               ? "Reopened"
               : "Updated";
 
-      return textResult(
-        `${verb} ${results.length} comment${results.length === 1 ? "" : "s"}: ${results.join(", ")}.`
-      );
+      return {
+        kind: "text" as const,
+        message: `${verb} ${results.length} comment${results.length === 1 ? "" : "s"}: ${results.join(", ")}.`,
+        skip: false,
+      };
+      });
+
+      if (outcome.skip && outcome.kind === "error") return errorResult(outcome.message);
+      if (outcome.skip) return textResult(outcome.message);
+      notifyRemarcReload();
+      return textResult(outcome.message);
     } catch (err) {
       return errorResult(String(err));
     }
@@ -477,23 +510,20 @@ export function registerTools(server: McpServer): void {
     },
   }, async ({ session_id, name }) => {
     try {
-      const state = await loadState();
-      const sessionIdUpper = session_id.toUpperCase();
-      const session = state.sessions.find(
-        (s) => s.id.toUpperCase() === sessionIdUpper && !s.isDeleted
-      );
+      const outcome = await withDocument((state) => {
+        const sessionIdUpper = session_id.toUpperCase();
+        const session = state.sessions.find(
+          (s) => s.id.toUpperCase() === sessionIdUpper && !s.isDeleted
+        );
+        if (!session) return { ok: false as const };
+        const oldName = session.name;
+        session.name = name;
+        return { ok: true as const, oldName };
+      });
 
-      if (!session) {
-        return errorResult(`Session not found: ${session_id}`);
-      }
-
-      const oldName = session.name;
-      session.name = name;
-
-      await writeAppState(state);
+      if (!outcome.ok) return errorResult(`Session not found: ${session_id}`);
       notifyRemarcReload();
-
-      return textResult(`Renamed session from "${oldName}" to "${name}".`);
+      return textResult(`Renamed session from "${outcome.oldName}" to "${name}".`);
     } catch (err) {
       return errorResult(String(err));
     }
@@ -509,7 +539,7 @@ export function registerTools(server: McpServer): void {
     },
   }, async ({ name, claude_session_id }) => {
     try {
-      const state = await loadState();
+      const created = await withDocument((state) => {
       const MAX_ACTIVE_SESSIONS = 8;
 
       // Deduplicate name
@@ -545,7 +575,7 @@ export function registerTools(server: McpServer): void {
             state.sessions[idx].autoDismissedAt = new Date();
           }
         } else {
-          return errorResult("Max sessions reached. Delete a session first.");
+          return { ok: false as const };
         }
       }
 
@@ -562,22 +592,26 @@ export function registerTools(server: McpServer): void {
         autoDismissedAt: null,
         origin: "claudeCode",
         claudeCodeSessionId: claude_session_id,
+        unknownFields: {},
       });
       state.activeSessionID = sessionId;
+      return { ok: true as const, sessionId, finalName };
+      });
 
-      await writeAppState(state);
+      if (!created.ok) {
+        return errorResult("Max sessions reached. Delete a session first.");
+      }
       notifyRemarcReload();
 
-      // Write marker file so UserPromptSubmit hook picks up comments
-      const markerPath = `/tmp/remarc-claude-${claude_session_id}.marker`;
-      const dataFilePath = getDataFilePath();
-      writeFileSync(markerPath, `${sessionId}\n${dataFilePath}\n`);
-      // Set mtime to past so first prompt check always triggers
-      const { execSync } = await import("node:child_process");
-      execSync(`touch -t 200001010000 "${markerPath}"`, { stdio: "pipe" });
+      // Marker so the hooks pick this session's comments up. Same JSON format
+      // the hooks write, so mid-chat linking and wake delivery share one file.
+      await writeMarker(claude_session_id, {
+        remarcSessionId: created.sessionId,
+        dataFilePath: getDataFilePath(),
+      });
 
       return textResult(
-        `Created Remarc session "${finalName}" (id: ${sessionId}). ` +
+        `Created Remarc session "${created.finalName}" (id: ${created.sessionId}). ` +
         `It's now the active session — comments you make in Remarc will be attached to your messages.`
       );
     } catch (err) {

@@ -1,0 +1,1 @@
+../../../shared/integrity.test.ts

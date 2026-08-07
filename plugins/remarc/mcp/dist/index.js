@@ -21098,10 +21098,11 @@ var StdioServerTransport = class {
 };
 
 // ../../shared/data.ts
-import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rename, mkdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
+import { randomBytes } from "node:crypto";
 var APPLE_EPOCH_OFFSET = 978307200;
 function appleToDate(timestamp) {
   return new Date((timestamp + APPLE_EPOCH_OFFSET) * 1e3);
@@ -21132,6 +21133,54 @@ function parseType(raw) {
   if (raw.type) return raw.type;
   return { quickNote: {} };
 }
+var KNOWN_COMMENT_KEYS = /* @__PURE__ */ new Set([
+  "id",
+  "type",
+  "selectedText",
+  "commentText",
+  "source",
+  "appBundleID",
+  "createdAt",
+  "updatedAt",
+  "sessionID",
+  "stackID",
+  "isDeleted",
+  "deletedAt",
+  "status",
+  "resolutionSummary",
+  "resolvedBy",
+  "resolvedAt",
+  "attachments",
+  "webContext",
+  "regionElements",
+  "wakeRequestedAt"
+]);
+var KNOWN_SESSION_KEYS = /* @__PURE__ */ new Set([
+  "id",
+  "name",
+  "createdAt",
+  "isDeleted",
+  "deletedAt",
+  "isAutoDismissed",
+  "autoDismissedAt",
+  "origin",
+  "claudeCodeSessionId"
+]);
+var KNOWN_STATE_KEYS = /* @__PURE__ */ new Set([
+  "sessions",
+  "stacks",
+  "comments",
+  "activeSessionID",
+  "activeStackID",
+  "totalCommentsCreated"
+]);
+function collectUnknown(raw, known) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!known.has(k)) out[k] = v;
+  }
+  return out;
+}
 function parseComment(raw) {
   return {
     id: raw.id,
@@ -21151,7 +21200,9 @@ function parseComment(raw) {
     resolvedAt: raw.resolvedAt != null ? appleToDate(raw.resolvedAt) : null,
     attachments: raw.attachments ?? [],
     webContext: raw.webContext ?? null,
-    regionElements: raw.regionElements ?? null
+    regionElements: raw.regionElements ?? null,
+    wakeRequestedAt: raw.wakeRequestedAt != null ? appleToDate(raw.wakeRequestedAt) : null,
+    unknownFields: collectUnknown(raw, KNOWN_COMMENT_KEYS)
   };
 }
 function parseSession(raw) {
@@ -21164,7 +21215,8 @@ function parseSession(raw) {
     isAutoDismissed: raw.isAutoDismissed,
     autoDismissedAt: raw.autoDismissedAt != null ? appleToDate(raw.autoDismissedAt) : null,
     origin: raw.origin ?? "manual",
-    claudeCodeSessionId: raw.claudeCodeSessionId ?? null
+    claudeCodeSessionId: raw.claudeCodeSessionId ?? null,
+    unknownFields: collectUnknown(raw, KNOWN_SESSION_KEYS)
   };
 }
 function parseAppState(raw) {
@@ -21173,11 +21225,13 @@ function parseAppState(raw) {
     sessions: rawSessions.map(parseSession),
     comments: raw.comments.map(parseComment),
     activeSessionID: raw.activeSessionID ?? raw.activeStackID ?? null,
-    totalCommentsCreated: raw.totalCommentsCreated
+    totalCommentsCreated: raw.totalCommentsCreated,
+    unknownFields: collectUnknown(raw, KNOWN_STATE_KEYS)
   };
 }
 function serializeComment(c) {
   const raw = {
+    ...c.unknownFields,
     id: c.id,
     type: c.type,
     commentText: c.commentText,
@@ -21196,10 +21250,14 @@ function serializeComment(c) {
   raw.attachments = c.attachments;
   if (c.webContext != null) raw.webContext = c.webContext;
   if (c.regionElements != null) raw.regionElements = c.regionElements;
+  if (c.wakeRequestedAt != null) {
+    raw.wakeRequestedAt = dateToApple(c.wakeRequestedAt);
+  }
   return raw;
 }
 function serializeSession(s) {
   return {
+    ...s.unknownFields,
     id: s.id,
     name: s.name,
     createdAt: dateToApple(s.createdAt),
@@ -21213,6 +21271,7 @@ function serializeSession(s) {
 }
 function serializeAppState(state) {
   return {
+    ...state.unknownFields,
     sessions: state.sessions.map(serializeSession),
     comments: state.comments.map(serializeComment),
     activeSessionID: state.activeSessionID,
@@ -21238,10 +21297,102 @@ async function writeAppState(state) {
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }
-  const tmpPath = filePath + ".tmp";
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   const json = JSON.stringify(serializeAppState(state), null, 2);
   await writeFile(tmpPath, json, "utf-8");
   await rename(tmpPath, filePath);
+}
+function getLockPath() {
+  return getDataFilePath() + ".lock";
+}
+var LOCK_TIMEOUT_MS = 2e3;
+var LOCK_POLL_MS = 25;
+var LOCK_STALE_MS = 1e4;
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === "EPERM";
+  }
+}
+async function acquireLock() {
+  const lockPath = getLockPath();
+  const dir = dirname(lockPath);
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (; ; ) {
+    try {
+      await mkdir(lockPath);
+      try {
+        await writeFile(
+          join(lockPath, "owner.json"),
+          JSON.stringify({ pid: process.pid, at: Date.now() }),
+          "utf-8"
+        );
+      } catch (err) {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {
+        });
+        throw err;
+      }
+      return lockPath;
+    } catch (err) {
+      if (err?.code !== "EEXIST") throw err;
+      try {
+        const info = await stat(lockPath);
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile(join(lockPath, "owner.json"), "utf-8")
+          );
+          abandoned = typeof owner.pid === "number" && !pidAlive(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS;
+        }
+        if (abandoned) {
+          try {
+            await rm(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+          }
+        }
+      } catch {
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Timed out after ${LOCK_TIMEOUT_MS}ms waiting for the Remarc data lock (${lockPath})`
+        );
+      }
+      await sleep(LOCK_POLL_MS);
+    }
+  }
+}
+async function releaseLock(lockPath) {
+  await rm(lockPath, { recursive: true, force: true }).catch(() => {
+  });
+}
+var SKIP_WRITE = /* @__PURE__ */ Symbol("remarc.skipWrite");
+async function withDocument(mutate) {
+  const lockPath = await acquireLock();
+  try {
+    const state = await readAppState() ?? {
+      sessions: [],
+      comments: [],
+      activeSessionID: null,
+      totalCommentsCreated: 0,
+      unknownFields: {}
+    };
+    const result = await mutate(state);
+    if (result !== SKIP_WRITE) {
+      await writeAppState(state);
+    }
+    return result;
+  } finally {
+    await releaseLock(lockPath);
+  }
 }
 function applyStatusUpdate(comment, status, summary, now) {
   comment.status = status;
@@ -21419,9 +21570,156 @@ function notifyRemarcReload() {
   child.unref();
 }
 
+// ../../shared/marker.ts
+import { readFile as readFile2, writeFile as writeFile2, rename as rename2, mkdir as mkdir2, rm as rm2, stat as stat2 } from "node:fs/promises";
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join2 } from "node:path";
+import { randomBytes as randomBytes2 } from "node:crypto";
+function markersDir() {
+  return join2(homedir2(), "Library", "Application Support", "Remarc", "claude", "markers");
+}
+function safeSessionId(claudeSessionId) {
+  const cleaned = claudeSessionId.replace(/[^A-Za-z0-9_-]/g, "");
+  if (!cleaned) throw new Error("Invalid Claude session id");
+  return cleaned.slice(0, 128);
+}
+function markerPath(claudeSessionId) {
+  return join2(markersDir(), `${safeSessionId(claudeSessionId)}.json`);
+}
+function legacyMarkerPath(claudeSessionId) {
+  return `/tmp/remarc-claude-${safeSessionId(claudeSessionId)}.marker`;
+}
+function emptyMarker() {
+  return {
+    remarcSessionId: "",
+    dataFilePath: "",
+    transcriptPath: null,
+    lastActivity: null,
+    wakeCapable: false,
+    deliveredIds: [],
+    wakedAt: {}
+  };
+}
+function coerce2(raw) {
+  if (raw == null || typeof raw !== "object") return null;
+  const r = raw;
+  return {
+    remarcSessionId: typeof r.remarcSessionId === "string" ? r.remarcSessionId : "",
+    dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
+    transcriptPath: typeof r.transcriptPath === "string" ? r.transcriptPath : null,
+    lastActivity: typeof r.lastActivity === "string" ? r.lastActivity : null,
+    wakeCapable: r.wakeCapable === true,
+    deliveredIds: Array.isArray(r.deliveredIds) ? r.deliveredIds.filter((x) => typeof x === "string") : [],
+    // Migrate the earlier id-array shape: treat prior wakes as generation 0.
+    wakedAt: r.wakedAt && typeof r.wakedAt === "object" ? r.wakedAt : Array.isArray(r.wakedIds) ? Object.fromEntries(
+      r.wakedIds.filter((x) => typeof x === "string").map((id) => [id, 0])
+    ) : {}
+  };
+}
+async function readMarker(claudeSessionId) {
+  const path = markerPath(claudeSessionId);
+  if (existsSync2(path)) {
+    try {
+      return coerce2(JSON.parse(await readFile2(path, "utf8")));
+    } catch {
+      return null;
+    }
+  }
+  const legacy = legacyMarkerPath(claudeSessionId);
+  if (existsSync2(legacy)) {
+    try {
+      const [remarcSessionId, dataFilePath] = (await readFile2(legacy, "utf8")).split("\n");
+      if (!remarcSessionId) return null;
+      return { ...emptyMarker(), remarcSessionId, dataFilePath: dataFilePath ?? "" };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+var LOCK_TIMEOUT_MS2 = 2e3;
+var LOCK_POLL_MS2 = 20;
+var LOCK_STALE_MS2 = 1e4;
+function sleep2(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+function pidAlive2(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === "EPERM";
+  }
+}
+async function acquire(lockPath) {
+  const deadline = Date.now() + LOCK_TIMEOUT_MS2;
+  for (; ; ) {
+    try {
+      await mkdir2(lockPath);
+      await writeFile2(
+        join2(lockPath, "owner.json"),
+        JSON.stringify({ pid: process.pid, at: Date.now() }),
+        "utf8"
+      ).catch(() => {
+      });
+      return;
+    } catch (err) {
+      if (err?.code !== "EEXIST") throw err;
+      try {
+        const info = await stat2(lockPath);
+        let abandoned = false;
+        try {
+          const owner = JSON.parse(
+            await readFile2(join2(lockPath, "owner.json"), "utf8")
+          );
+          abandoned = typeof owner.pid === "number" && !pidAlive2(owner.pid);
+        } catch {
+          abandoned = Date.now() - info.mtimeMs > LOCK_STALE_MS2;
+        }
+        if (abandoned) {
+          try {
+            await rm2(lockPath, { recursive: true, force: true });
+            continue;
+          } catch {
+          }
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for marker lock ${lockPath}`);
+      }
+      await sleep2(LOCK_POLL_MS2);
+    }
+  }
+}
+async function updateMarker(claudeSessionId, mutate) {
+  const path = markerPath(claudeSessionId);
+  const dir = markersDir();
+  if (!existsSync2(dir)) await mkdir2(dir, { recursive: true });
+  const lockPath = path + ".lock";
+  await acquire(lockPath);
+  try {
+    const current = await readMarker(claudeSessionId) ?? emptyMarker();
+    mutate(current);
+    const tmp = `${path}.${process.pid}.${randomBytes2(4).toString("hex")}.tmp`;
+    await writeFile2(tmp, JSON.stringify(current, null, 2), "utf8");
+    await rename2(tmp, path);
+    return current;
+  } finally {
+    await rm2(lockPath, { recursive: true, force: true }).catch(() => {
+    });
+  }
+}
+async function writeMarker(claudeSessionId, m) {
+  await updateMarker(claudeSessionId, (cur) => {
+    Object.assign(cur, m);
+  });
+}
+
 // src/tools.ts
 import { randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
 function textResult(text) {
   return { content: [{ type: "text", text }] };
 }
@@ -21631,33 +21929,52 @@ ${formatted.join("\n\n")}${nudge}`);
     inputSchema: {
       id: external_exports.string().describe("Full UUID or short ID (e.g. 'a3f2b')."),
       status: external_exports.enum(["handedOff", "inProgress", "resolved", "open"]).describe("New status for the comment."),
-      summary: external_exports.string().optional().describe('How/why the comment was resolved. Required when status is "resolved".')
+      summary: external_exports.string().optional().describe('How/why the comment was resolved. Required when status is "resolved".'),
+      expected_status: external_exports.enum(["open", "handedOff", "inProgress", "resolved"]).optional().describe(
+        'Only apply the change if the comment currently has this status. Use it to claim work another agent may also have been woken for: expected_status "handedOff" with status "inProgress" succeeds for exactly one caller.'
+      )
     }
-  }, async ({ id, status, summary }) => {
+  }, async ({ id, status, summary, expected_status }) => {
     try {
-      const state = await loadState();
-      const comment = findComment(state.comments, id);
-      if (!comment) {
-        return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
-      }
-      if (comment.status === status) {
-        return errorResult(`Comment is already ${status}.`);
-      }
       if (status === "resolved" && !summary) {
         return errorResult("A summary is required when resolving. Briefly describe what you did.");
       }
-      applyStatusUpdate(comment, status, summary, /* @__PURE__ */ new Date());
-      await writeAppState(state);
+      const outcome = await withDocument((state) => {
+        const comment = findComment(state.comments, id);
+        if (!comment) {
+          return { kind: "missing" };
+        }
+        if (expected_status != null && comment.status !== expected_status) {
+          return { kind: "conflict", actual: comment.status, shortID: comment.shortID };
+        }
+        if (comment.status === status) {
+          return { kind: "noop", shortID: comment.shortID };
+        }
+        applyStatusUpdate(comment, status, summary, /* @__PURE__ */ new Date());
+        return { kind: "ok", shortID: comment.shortID };
+      });
+      if (outcome.kind === "missing") {
+        return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
+      }
+      if (outcome.kind === "conflict") {
+        return errorResult(
+          `Comment ${outcome.shortID} is ${outcome.actual}, not ${expected_status} - another agent likely claimed it. Skip this comment.`
+        );
+      }
+      if (outcome.kind === "noop") {
+        return errorResult(`Comment is already ${status}.`);
+      }
       notifyRemarcReload();
-      const shortId = comment.shortID;
       switch (status) {
         case "resolved":
-          return textResult(`Resolved comment ${shortId}.
+          return textResult(`Resolved comment ${outcome.shortID}.
 Summary: ${summary}`);
         case "inProgress":
-          return textResult(`Marked comment ${shortId} as in progress.`);
+          return textResult(`Marked comment ${outcome.shortID} as in progress.`);
         case "open":
-          return textResult(`Reopened comment ${shortId}.`);
+          return textResult(`Reopened comment ${outcome.shortID}.`);
+        case "handedOff":
+          return textResult(`Marked comment ${outcome.shortID} as handed off.`);
       }
     } catch (err) {
       return errorResult(String(err));
@@ -21684,60 +22001,69 @@ Summary: ${summary}`);
     }
   }, async ({ status, comments: commentEntries, session_id, summary }) => {
     try {
-      const state = await loadState();
-      let targets = [];
-      if (commentEntries && commentEntries.length > 0) {
-        for (const entry of commentEntries) {
-          const comment = findComment(state.comments, entry.id);
-          if (!comment) {
-            return errorResult(
-              `Comment not found: ${entry.id}. Use remarc_list_comments to see available comments.`
-            );
+      const outcome = await withDocument((state) => {
+        let targets = [];
+        if (commentEntries && commentEntries.length > 0) {
+          for (const entry of commentEntries) {
+            const comment = findComment(state.comments, entry.id);
+            if (!comment) {
+              return {
+                kind: "error",
+                message: `Comment not found: ${entry.id}. Use remarc_list_comments to see available comments.`,
+                skip: true
+              };
+            }
+            targets.push({
+              comment,
+              summary: entry.summary ?? summary
+            });
           }
-          targets.push({
-            comment,
-            summary: entry.summary ?? summary
-          });
-        }
-      } else if (session_id) {
-        const sessionComments = state.comments.filter(
-          (c) => c.sessionID.toUpperCase() === session_id.toUpperCase() && !c.isDeleted && c.status !== status
-        );
-        if (sessionComments.length === 0) {
-          return textResult(
-            `No comments to update in session ${session_id}.`
+        } else if (session_id) {
+          const sessionComments = state.comments.filter(
+            (c) => c.sessionID.toUpperCase() === session_id.toUpperCase() && !c.isDeleted && c.status !== status
           );
+          if (sessionComments.length === 0) {
+            return { kind: "text", message: `No comments to update in session ${session_id}.`, skip: true };
+          }
+          targets = sessionComments.map((c) => ({ comment: c, summary }));
+        } else {
+          return {
+            kind: "error",
+            message: "Provide either a comments array or session_id to specify which comments to update.",
+            skip: true
+          };
         }
-        targets = sessionComments.map((c) => ({ comment: c, summary }));
-      } else {
-        return errorResult(
-          "Provide either a comments array or session_id to specify which comments to update."
-        );
-      }
-      if (status === "resolved") {
-        const missingSummary = targets.find((t) => !t.summary);
-        if (missingSummary) {
-          return errorResult(
-            "A summary is required when resolving. Provide a shared summary or individual summaries for each comment."
-          );
+        if (status === "resolved") {
+          const missingSummary = targets.find((t) => !t.summary);
+          if (missingSummary) {
+            return {
+              kind: "error",
+              message: "A summary is required when resolving. Provide a shared summary or individual summaries for each comment.",
+              skip: true
+            };
+          }
         }
-      }
-      const now = /* @__PURE__ */ new Date();
-      const results = [];
-      for (const { comment, summary: commentSummary } of targets) {
-        if (comment.status === status) continue;
-        applyStatusUpdate(comment, status, commentSummary, now);
-        results.push(comment.shortID);
-      }
-      if (results.length === 0) {
-        return textResult("All targeted comments already have that status.");
-      }
-      await writeAppState(state);
+        const now = /* @__PURE__ */ new Date();
+        const results = [];
+        for (const { comment, summary: commentSummary } of targets) {
+          if (comment.status === status) continue;
+          applyStatusUpdate(comment, status, commentSummary, now);
+          results.push(comment.shortID);
+        }
+        if (results.length === 0) {
+          return { kind: "text", message: "All targeted comments already have that status.", skip: true };
+        }
+        const verb = status === "resolved" ? "Resolved" : status === "inProgress" ? "Marked in progress" : status === "open" ? "Reopened" : "Updated";
+        return {
+          kind: "text",
+          message: `${verb} ${results.length} comment${results.length === 1 ? "" : "s"}: ${results.join(", ")}.`,
+          skip: false
+        };
+      });
+      if (outcome.skip && outcome.kind === "error") return errorResult(outcome.message);
+      if (outcome.skip) return textResult(outcome.message);
       notifyRemarcReload();
-      const verb = status === "resolved" ? "Resolved" : status === "inProgress" ? "Marked in progress" : status === "open" ? "Reopened" : "Updated";
-      return textResult(
-        `${verb} ${results.length} comment${results.length === 1 ? "" : "s"}: ${results.join(", ")}.`
-      );
+      return textResult(outcome.message);
     } catch (err) {
       return errorResult(String(err));
     }
@@ -21750,19 +22076,19 @@ Summary: ${summary}`);
     }
   }, async ({ session_id, name }) => {
     try {
-      const state = await loadState();
-      const sessionIdUpper = session_id.toUpperCase();
-      const session = state.sessions.find(
-        (s) => s.id.toUpperCase() === sessionIdUpper && !s.isDeleted
-      );
-      if (!session) {
-        return errorResult(`Session not found: ${session_id}`);
-      }
-      const oldName = session.name;
-      session.name = name;
-      await writeAppState(state);
+      const outcome = await withDocument((state) => {
+        const sessionIdUpper = session_id.toUpperCase();
+        const session = state.sessions.find(
+          (s) => s.id.toUpperCase() === sessionIdUpper && !s.isDeleted
+        );
+        if (!session) return { ok: false };
+        const oldName = session.name;
+        session.name = name;
+        return { ok: true, oldName };
+      });
+      if (!outcome.ok) return errorResult(`Session not found: ${session_id}`);
       notifyRemarcReload();
-      return textResult(`Renamed session from "${oldName}" to "${name}".`);
+      return textResult(`Renamed session from "${outcome.oldName}" to "${name}".`);
     } catch (err) {
       return errorResult(String(err));
     }
@@ -21775,63 +22101,65 @@ Summary: ${summary}`);
     }
   }, async ({ name, claude_session_id }) => {
     try {
-      const state = await loadState();
-      const MAX_ACTIVE_SESSIONS = 8;
-      const activeSessions = state.sessions.filter(
-        (s) => !s.isDeleted && !s.isAutoDismissed
-      );
-      const existingNames = new Set(
-        activeSessions.filter((s) => s.origin === "claudeCode").map((s) => s.name)
-      );
-      let finalName = name;
-      if (existingNames.has(name)) {
-        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        for (const letter of letters) {
-          const candidate = `${name} ${letter}`;
-          if (!existingNames.has(candidate)) {
-            finalName = candidate;
-            break;
+      const created = await withDocument((state) => {
+        const MAX_ACTIVE_SESSIONS = 8;
+        const activeSessions = state.sessions.filter(
+          (s) => !s.isDeleted && !s.isAutoDismissed
+        );
+        const existingNames = new Set(
+          activeSessions.filter((s) => s.origin === "claudeCode").map((s) => s.name)
+        );
+        let finalName = name;
+        if (existingNames.has(name)) {
+          const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+          for (const letter of letters) {
+            const candidate = `${name} ${letter}`;
+            if (!existingNames.has(candidate)) {
+              finalName = candidate;
+              break;
+            }
           }
         }
-      }
-      if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
-        const claudeSessions = activeSessions.filter((s) => s.origin === "claudeCode").sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        if (claudeSessions.length > 0) {
-          const oldest = claudeSessions[0];
-          const idx = state.sessions.findIndex((s) => s.id === oldest.id);
-          if (idx !== -1) {
-            state.sessions[idx].isAutoDismissed = true;
-            state.sessions[idx].autoDismissedAt = /* @__PURE__ */ new Date();
+        if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
+          const claudeSessions = activeSessions.filter((s) => s.origin === "claudeCode").sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+          if (claudeSessions.length > 0) {
+            const oldest = claudeSessions[0];
+            const idx = state.sessions.findIndex((s) => s.id === oldest.id);
+            if (idx !== -1) {
+              state.sessions[idx].isAutoDismissed = true;
+              state.sessions[idx].autoDismissedAt = /* @__PURE__ */ new Date();
+            }
+          } else {
+            return { ok: false };
           }
-        } else {
-          return errorResult("Max sessions reached. Delete a session first.");
         }
-      }
-      const sessionId = randomUUID().toUpperCase();
-      const now = /* @__PURE__ */ new Date();
-      state.sessions.push({
-        id: sessionId,
-        name: finalName,
-        createdAt: now,
-        isDeleted: false,
-        deletedAt: null,
-        isAutoDismissed: false,
-        autoDismissedAt: null,
-        origin: "claudeCode",
-        claudeCodeSessionId: claude_session_id
+        const sessionId = randomUUID().toUpperCase();
+        const now = /* @__PURE__ */ new Date();
+        state.sessions.push({
+          id: sessionId,
+          name: finalName,
+          createdAt: now,
+          isDeleted: false,
+          deletedAt: null,
+          isAutoDismissed: false,
+          autoDismissedAt: null,
+          origin: "claudeCode",
+          claudeCodeSessionId: claude_session_id,
+          unknownFields: {}
+        });
+        state.activeSessionID = sessionId;
+        return { ok: true, sessionId, finalName };
       });
-      state.activeSessionID = sessionId;
-      await writeAppState(state);
+      if (!created.ok) {
+        return errorResult("Max sessions reached. Delete a session first.");
+      }
       notifyRemarcReload();
-      const markerPath = `/tmp/remarc-claude-${claude_session_id}.marker`;
-      const dataFilePath = getDataFilePath();
-      writeFileSync(markerPath, `${sessionId}
-${dataFilePath}
-`);
-      const { execSync } = await import("node:child_process");
-      execSync(`touch -t 200001010000 "${markerPath}"`, { stdio: "pipe" });
+      await writeMarker(claude_session_id, {
+        remarcSessionId: created.sessionId,
+        dataFilePath: getDataFilePath()
+      });
       return textResult(
-        `Created Remarc session "${finalName}" (id: ${sessionId}). It's now the active session \u2014 comments you make in Remarc will be attached to your messages.`
+        `Created Remarc session "${created.finalName}" (id: ${created.sessionId}). It's now the active session \u2014 comments you make in Remarc will be attached to your messages.`
       );
     } catch (err) {
       return errorResult(String(err));

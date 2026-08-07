@@ -2,12 +2,11 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|compact|clear",
+        "matcher": "startup|resume|compact|clear|fork",
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js", "session-start"],
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" session-start",
             "timeout": 10
           }
         ]
@@ -18,9 +17,33 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js", "prompt-submit"],
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" prompt-submit",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" cwd-changed",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "FileChanged": [
+      {
+        "matcher": "comments.json|data.json",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" file-changed",
+            "timeout": 10,
+            "async": true,
+            "asyncRewake": true
           }
         ]
       }
@@ -30,9 +53,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js", "session-end"],
-            "timeout": 5
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/dist/hook.js\" session-end",
+            "timeout": 3
           }
         ]
       }
