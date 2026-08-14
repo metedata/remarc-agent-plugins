@@ -1,6 +1,8 @@
 # App ↔ Plugin contracts
 
-Stable surfaces the `remarc-hooks` plugin consumes from the Remarc macOS app. Breaking changes to these require a coordinated app + plugin release.
+Stable surfaces shared by the Remarc macOS app, MCP server, `remarc-hooks`, and
+`remarc-wake`. Breaking changes to these require a coordinated app + plugin
+release.
 
 ## File-system contract
 

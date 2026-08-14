@@ -16,6 +16,8 @@ body:
         - Claude Code remarc plugin
         - Claude Code remarc-hooks plugin
         - Codex remarc plugin
+        - OMP remarc plugin
+        - OMP remarc-wake plugin
         - Shared MCP or data contract
         - Documentation
         - Other
@@ -26,7 +28,7 @@ body:
     attributes:
       label: Versions
       description: Include the Remarc version, plugin version, agent CLI version, Node.js version, and macOS version.
-      placeholder: "Remarc 1.0.1; plugin 0.10.0; Codex 0.146.1; Node 22; macOS 15"
+      placeholder: "Remarc 1.1.0; plugin 0.12.1; OMP 17.3.4; Node 22; macOS 15"
     validations:
       required: true
   - type: textarea

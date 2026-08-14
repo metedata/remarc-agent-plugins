@@ -9,12 +9,35 @@ handshake and is recorded separately when it changes.
 
 ## Unreleased
 
+No entries yet.
+
+## 0.12.1 - 2026-08-15
+
+### Added
+
+- Added package-local MIT license files and canonical third-party notices for
+  the dependencies bundled into the installed MCP artifact.
+- Added automated notice validation and cached-package smoke assertions so
+  release packages cannot omit their license material.
+
+### Changed
+
+- Bumped the public integration version to 0.12.1 across the supported
+  manifests and marketplace entries. The MCP implementation remains 0.3.0 and
+  the runtime bundles are unchanged from 0.12.0.
+- Added self-describing package metadata to the optional OMP wake extension.
+
 ### Documentation
 
 - Recorded the Remarc 1.1.0 release and the completed public Git-marketplace
-  acceptance smoke for OMP plugin 0.12.0.
+  acceptance smoke for OMP plugins 0.12.0 and 0.12.1.
 - Updated the repository's public description, topics, and root release
   documentation to surface OMP and the current tagged releases.
+- Brought contributor, security, and OMP architecture documentation in line
+  with the shipped wake package, unknown-field preservation, Remarc 1.1.0, and
+  the completed public marketplace rollout.
+- Added OMP-specific issue and pull-request support paths plus current
+  development and release verification commands.
 
 ## 0.12.0 - 2026-08-15
 

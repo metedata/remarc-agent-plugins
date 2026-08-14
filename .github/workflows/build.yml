@@ -17,6 +17,9 @@ jobs:
         working-directory: plugins/remarc/mcp
         run: npm ci && npm audit --audit-level=high && npm test && npm run build
 
+      - name: verify third-party distribution notices
+        run: node scripts/check-third-party-notices.mjs
+
       - name: build + test OMP wake extension
         working-directory: plugins/remarc-wake
         run: npm ci && npm audit --omit=dev --audit-level=high && npm run typecheck && npm test && npm run build
@@ -106,3 +109,10 @@ jobs:
           claude plugin install remarc-hooks@remarc
           test -f "$HOME/.claude/plugins/cache/remarc/remarc/"*"/mcp/dist/index.js"
           test -f "$HOME/.claude/plugins/cache/remarc/remarc-hooks/"*"/cli/dist/hook.js"
+          test -f "$HOME/.claude/plugins/cache/remarc/remarc/"*"/LICENSE"
+          test -f "$HOME/.claude/plugins/cache/remarc/remarc/"*"/THIRD-PARTY-NOTICES.md"
+          test -f "$HOME/.claude/plugins/cache/remarc/remarc-hooks/"*"/LICENSE"
+          cmp -s LICENSE "$HOME/.claude/plugins/cache/remarc/remarc/"*"/LICENSE"
+          cmp -s plugins/remarc/THIRD-PARTY-NOTICES.md \
+            "$HOME/.claude/plugins/cache/remarc/remarc/"*"/THIRD-PARTY-NOTICES.md"
+          cmp -s LICENSE "$HOME/.claude/plugins/cache/remarc/remarc-hooks/"*"/LICENSE"

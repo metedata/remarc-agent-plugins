@@ -129,7 +129,7 @@ cached package shape, native OMP session creation, and marker isolation:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.12.0
+  --expected-version 0.12.1
 ```
 
 The script requires the exact `omp/17.3.4` version output and removes only the
@@ -137,9 +137,10 @@ temporary profile it created. A checkout-backed run proves the candidate
 package, but not public distribution. After the commit is merged, repeat the
 same script with
 `--marketplace metedata/remarc-agent-plugins`; that post-merge run is the Git
-marketplace acceptance gate. The [0.12.0
-release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.0)
-completed that public Git-marketplace gate on 2026-08-15.
+marketplace acceptance gate. The [0.12.1
+release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.1)
+completed that public Git-marketplace gate on 2026-08-15, including
+package-local license and third-party-notice checks.
 
 ## Troubleshooting
 

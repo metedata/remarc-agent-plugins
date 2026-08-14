@@ -11,7 +11,7 @@ skill. Install both packages if OMP should receive and address comments; omit
 
 ## Compatibility
 
-- `remarc-wake` **0.12.0**
+- `remarc-wake` **0.12.1**
 - OMP **17.3.4** (the exact supported and tested baseline)
 - macOS with Remarc 1.1.0 or later installed and launched at least once
 - Node.js available to the OMP process

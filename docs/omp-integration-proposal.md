@@ -1,12 +1,19 @@
 # OMP integration architecture
 
-**Status:** Core MCP and skill support shipped in 0.11.0. Version 0.12.0 adds
-the optional wake extension, native OMP session origin, and the coordinated
-Remarc app lease reader and badge described here.
+**Status:** Shipped. Core MCP and skill support landed in 0.11.0; the optional
+wake extension and native OMP session origin shipped in [plugin
+0.12.0](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.0),
+and the coordinated lease reader, neutral Instant delivery UI, and badge
+shipped in [Remarc
+1.1.0](https://github.com/metedata/Remarc/releases/tag/v1.1.0). This document
+is retained as the implementation decision record.
 
 **Target reviewed:** OMP 17.3.4 at commit [`ffd53ff`](https://github.com/can1357/oh-my-pi/tree/ffd53ff92a6f575d499730475a73460dd7cc2eea), reviewed 2026-08-14.
 
-**Prototype:** [Remarc PR #3](https://github.com/metedata/Remarc/pull/3) at `733bf843`. The prototype is useful protocol and test evidence, but its installer and app-coupled package shape are not the proposed architecture.
+**Prototype:** [Remarc PR #3](https://github.com/metedata/Remarc/pull/3) at
+`733bf843`. The prototype remains useful protocol and test evidence, but its
+installer and app-coupled package shape were superseded by the shipped
+architecture described here.
 
 ## Decision
 
@@ -92,7 +99,7 @@ The wake package declares a built JavaScript entry point so an installation neve
 ```json
 {
   "name": "@metedata/remarc-wake",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "private": true,
   "type": "module",
   "omp": {
@@ -194,9 +201,10 @@ tools: list/get, compare-and-set claim, resolve/reopen/handoff, bulk resolve,
 rename, and native create calls with no harness plus spoofed Claude Code and
 Codex inputs. It also proves `resolvedBy: "omp"`, preservation of unknown
 document/session/comment/web-context fields, and restoration of byte-identical
-Remarc data and marker sentinels around the isolated test. The equivalent public
-Git marketplace run remains a post-merge release gate; a local checkout cannot
-prove that distribution path.
+Remarc data and marker sentinels around the isolated test. The equivalent
+public Git-marketplace runs passed for 0.12.0 and the packaging-only 0.12.1
+follow-up on 2026-08-15, proving the remote distribution path, cached installed
+artifacts, and package-local notices in addition to the local checkout shape.
 
 ## Phase 2: optional `remarc-wake` extension (0.12.0)
 
@@ -285,9 +293,10 @@ After installing or upgrading `remarc-wake`, restart the OMP session. OMP can
 reload skills and MCP servers in place, but newly installed extension modules
 are initialized only for a new session.
 
-## Phase 3: minimal Remarc app enablement
+## Phase 3: minimal Remarc app enablement (shipped in 1.1.0)
 
-Release the wake extension only with the small app changes that make it usable and truthful:
+The wake extension shipped with the small app changes needed to make it usable
+and truthful:
 
 - move the opt-in Instant Delivery toggle out of the Claude-hooks-only section;
 - describe delivery to a “paired agent session” rather than only Claude Code;
@@ -322,13 +331,17 @@ OMP indicator must remain marker-driven and visually distinct.
 
 1. **OSS baseline and RFC** - completed.
 2. **OMP core support** - released in 0.11.0.
-3. **OMP wake and native origin** - implemented externally for 0.12.0.
-4. **Remarc app enablement** - coordinated lease-aware reachability, neutral UI,
-   native origin, official badge, fixtures, and tests for Remarc 1.1.0.
-5. **Coordinated publication** - public Git marketplace smoke, released plugin,
-   released compatible app, and replacement notice on the prototype PR.
+3. **OMP wake and native origin** - released externally in 0.12.0.
+4. **Remarc app enablement** - released in Remarc 1.1.0 with lease-aware
+   reachability, neutral UI, native origin, the official badge, fixtures, and
+   tests.
+5. **Coordinated publication** - completed with the public Git-marketplace
+   smoke, released plugin and app, public documentation, and the replacement
+   notice on the prototype PR.
 
-After equivalent external tests pass, close or replace PR #3 rather than merging its 4,500-line app-centered shape.
+[PR #3](https://github.com/metedata/Remarc/pull/3) was closed as superseded
+after all five steps completed rather than merging its 4,500-line app-centered
+shape.
 
 ## Verification gates
 
@@ -351,7 +364,7 @@ validated temporary root:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.12.0
+  --expected-version 0.12.1
 ```
 
 That run verifies the candidate checkout's Agent Plugins 1.0 package shape,
@@ -365,8 +378,8 @@ The local-directory source does not satisfy the Git-marketplace acceptance
 gate. After merge, repeat the same script with
 `--marketplace metedata/remarc-agent-plugins`. Assert from machine-readable
 plugin state that OMP installed the package into its isolated marketplace cache
-and not from a source checkout. A future release should also add an N-1 to
-current upgrade fixture.
+and not from a source checkout. Versions 0.12.0 and 0.12.1 passed this gate on
+2026-08-15. A future release should also add an N-1 to current upgrade fixture.
 
 App validation for the coordinated Remarc change:
 

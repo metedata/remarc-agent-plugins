@@ -98,6 +98,8 @@ The MCP server and hooks read and update Remarc's local data file. They do not s
 Comments may contain text captured from web pages, applications, screenshots, or transcriptions. The integrations treat that material as untrusted source content, preserve unknown data fields, and use bounded, delimited payloads for automatic delivery.
 
 Plugins execute with your user account's permissions. Review the source before installation and report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+The licenses for dependencies bundled into the installed MCP artifact are
+recorded in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Repository layout
 
@@ -135,15 +137,15 @@ own temporary HOME, XDG roots, project, and Remarc fixture:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.12.0
+  --expected-version 0.12.1
 ```
 
 That local-source run proves packaging before publication. The
-[0.12.0 release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.0)
+[0.12.1 release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.1)
 also passed the same smoke against
 `--marketplace metedata/remarc-agent-plugins`, proving the public Git
-marketplace path and cached installed artifact. Repeat both paths for future
-releases. See
+marketplace path, cached installed artifact, and package-local license notices.
+Repeat both paths for future releases. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full contract and fixture checks. Do
 not run a marketplace installation smoke test against your normal agent
 profile. Codex clean-install coverage remains a documented gap.
