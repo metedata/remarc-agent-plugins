@@ -79,11 +79,9 @@ function emptyMarker(): Marker {
 function coerce(raw: unknown): Marker | null {
   if (raw == null || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  // Deliberately NOT requiring remarcSessionId. The wake path creates a marker
-  // purely to record what it has woken for, and never pairs a Remarc session -
-  // rejecting those made every wake marker unreadable, so the same comment woke
-  // on every single file change, forever. Callers that need a pairing check the
-  // field themselves.
+  // Deliberately NOT requiring remarcSessionId. SessionStart can advertise
+  // harness capability before a Remarc session is paired. Callers that require
+  // an actual delivery address check the field themselves.
   return {
     remarcSessionId: typeof r.remarcSessionId === "string" ? r.remarcSessionId : "",
     dataFilePath: typeof r.dataFilePath === "string" ? r.dataFilePath : "",
@@ -108,9 +106,10 @@ function coerce(raw: unknown): Marker | null {
 }
 
 /**
- * Read a marker, migrating the legacy two-line /tmp format when present.
- * A corrupt or unreadable marker reads as null; callers treat that as "no
- * delivery history", which at worst re-delivers a comment once.
+ * Read a marker, falling back to the legacy two-line /tmp format when present.
+ * The fallback is not eagerly rewritten; a later marker update writes the JSON
+ * form. A corrupt or unreadable marker reads as null; callers treat that as
+ * "no delivery history", which at worst re-delivers a comment once.
  */
 export async function readMarker(claudeSessionId: string): Promise<Marker | null> {
   const path = markerPath(claudeSessionId);
