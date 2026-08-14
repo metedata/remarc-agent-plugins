@@ -4,7 +4,7 @@ This page distinguishes currently supported behavior from code that merely exist
 
 ## Inspected baselines
 
-The following versions and artifacts were inspected on 2026-08-14. They are not
+The following versions and artifacts were inspected on 2026-08-15. They are not
 all one end-to-end tested combination: package tests and Claude marketplace
 validation ran locally; the shipping app and Codex CLI were checked separately.
 OMP 17.3.4 was exercised from an isolated profile through marketplace install,
@@ -12,7 +12,7 @@ skill discovery, TUI MCP discovery, and the installed MCP bundle.
 
 | Component | Baseline |
 | --- | --- |
-| Remarc | 1.0.1 for core OMP; 1.1.0 candidate for OMP badge and instant delivery |
+| Remarc | 1.1.0 for OMP badge and instant delivery; 1.0.1 remains core-only compatible |
 | Remarc plugins | 0.12.0 (this release); 0.11.0 is the prior baseline |
 | macOS | Remarc's minimum is macOS 14.0 |
 | CI Node.js | 22 |
@@ -24,14 +24,13 @@ skill discovery, TUI MCP discovery, and the installed MCP bundle.
 These are not permanent minimum-version guarantees. CI currently exercises
 macOS with Node 22, not a Node-version matrix.
 
-The OMP pre-publication smoke uses a local candidate marketplace and confirms
-that OMP installs a cached copy rather than a symlink to the checkout. The same
-smoke must be repeated against `metedata/remarc-agent-plugins` after merge; that
-public Git-marketplace run cannot be completed before the candidate exists on
-the remote default branch. Codex support is shipped by Remarc 1.0.1 and its
-commands were checked against the CLI baseline above, but Codex manifest,
-discovery, and clean-install coverage still need to be added to this
-repository's CI.
+The OMP smoke passed both against a local candidate marketplace and the public
+`metedata/remarc-agent-plugins` Git marketplace. The public run installed
+version 0.12.0 into isolated user and project profiles and verified cached
+packages, scope shadowing, commands, MCP tools, and marker isolation without a
+symlink to the checkout. Codex commands were checked against the CLI baseline
+above, but Codex manifest, discovery, and clean-install coverage still need to
+be added to this repository's CI.
 
 ## Capability matrix
 
@@ -91,7 +90,9 @@ agent-callable identifiers such as
 `mcp__remarc_remarc_remarc_list_sessions`. See the
 [OMP guide](integrations/omp.md) for scope and lifecycle commands.
 
-These are the commands used by Remarc 1.0.1. Agent CLIs change independently; consult the agent's own help when a newer version rejects a command.
+These commands were checked against the agent CLI baselines above. Agent CLIs
+change independently; consult the agent's own help when a newer version rejects
+a command.
 
 ## What “supported” means
 

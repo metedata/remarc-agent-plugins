@@ -137,7 +137,9 @@ temporary profile it created. A checkout-backed run proves the candidate
 package, but not public distribution. After the commit is merged, repeat the
 same script with
 `--marketplace metedata/remarc-agent-plugins`; that post-merge run is the Git
-marketplace acceptance gate.
+marketplace acceptance gate. The [0.12.0
+release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.0)
+completed that public Git-marketplace gate on 2026-08-15.
 
 ## Troubleshooting
 
