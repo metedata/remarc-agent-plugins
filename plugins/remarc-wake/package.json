@@ -1,8 +1,15 @@
 {
   "name": "@metedata/remarc-wake",
-  "version": "0.12.0",
+  "version": "0.12.1",
+  "description": "Optional OMP extension for explicit Remarc session pairing and instant comment delivery.",
   "private": true,
   "type": "module",
+  "license": "MIT",
+  "homepage": "https://remarc.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/metedata/remarc-agent-plugins.git"
+  },
   "omp": {
     "extensions": [
       "./dist/index.js"

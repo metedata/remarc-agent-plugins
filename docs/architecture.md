@@ -10,8 +10,10 @@ flowchart LR
     P --> M["Remarc MCP server"]
     M -->|"locked read or write"| D["comments.json"]
     R["Remarc.app"] -->|"locked read or write"| D
-    H["Optional lifecycle hooks"] -->|"context and status delivery"| A
+    H["Optional Claude lifecycle hooks"] -->|"context and status delivery"| A
     H -->|"pairing markers"| K["marker directory"]
+    W["Optional OMP wake extension"] -->|"next-turn delivery"| A
+    W -->|"versioned lease and outbox"| K
     R -->|"wake request and reachability"| K
     S["Plugin source and dist"] -->|"vendored with provenance"| R
 ```
@@ -57,9 +59,29 @@ Claude Code hooks can:
 - wind down according to the user's preference when a conversation is cleared;
 - unlink without deleting comments when the agent exits.
 
+### Optional `remarc-wake` plugin
+
+`plugins/remarc-wake` is the OMP-only executable extension for explicit
+instant-delivery pairing. It installs separately from the core plugin so MCP
+comment workflows do not require a background extension. It:
+
+- exposes `/remarc-pair` and `/remarc-unpair` for the current OMP session;
+- holds one token-fenced, PID-and-heartbeat lease per Remarc pairing;
+- watches and polls the Remarc data file using OMP-managed lifecycle timers;
+- writes a durable `pendingWake` outbox before requesting next-turn delivery;
+- replays unclaimed generations after resume, branch, or session transitions;
+- removes its own marker on clean shutdown and lets the bounded lease expire
+  after forced process death.
+
+OMP owns installation, user/project scope, enablement, updates, and extension
+loading. Remarc.app reads only the versioned marker contract and never scans
+OMP's profiles or plugin cache.
+
 ### Shared contracts
 
-`plugins/shared` is linked into both TypeScript packages during development. It owns:
+`plugins/shared` is consumed by all three TypeScript runtime packages. The MCP
+and hooks packages expose it through checked-in symlinks; `remarc-wake` bundles
+it through relative imports. It owns:
 
 - Apple-reference-date conversion and tolerant JSON parsing;
 - unknown-field preservation;

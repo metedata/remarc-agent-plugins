@@ -13,7 +13,7 @@ skill discovery, TUI MCP discovery, and the installed MCP bundle.
 | Component | Baseline |
 | --- | --- |
 | Remarc | 1.1.0 for OMP badge and instant delivery; 1.0.1 remains core-only compatible |
-| Remarc plugins | 0.12.0 (this release); 0.11.0 is the prior baseline |
+| Remarc plugins | 0.12.1 (this release); 0.12.0 is the prior baseline |
 | macOS | Remarc's minimum is macOS 14.0 |
 | CI Node.js | 22 |
 | Bundle target | Node.js 18 |
@@ -26,7 +26,7 @@ macOS with Node 22, not a Node-version matrix.
 
 The OMP smoke passed both against a local candidate marketplace and the public
 `metedata/remarc-agent-plugins` Git marketplace. The public run installed
-version 0.12.0 into isolated user and project profiles and verified cached
+version 0.12.1 into isolated user and project profiles and verified cached
 packages, scope shadowing, commands, MCP tools, and marker isolation without a
 symlink to the checkout. Codex commands were checked against the CLI baseline
 above, but Codex manifest, discovery, and clean-install coverage still need to
@@ -119,7 +119,7 @@ Lifecycle or instant-delivery support additionally requires session-scoped routi
 - Session origin and attribution still contain legacy Claude-named fields; new harnesses must not silently reuse a false origin.
 - OMP-created sessions use native `origin: "omp"`. Run `/remarc-pair` after
   creation when that conversation should receive instant delivery.
-- OMP instant delivery requires Remarc 1.1.0 or later. Plugin 0.12.0 may be
+- OMP instant delivery requires Remarc 1.1.0 or later. Plugin 0.12.1 may be
   installed alongside Remarc 1.0.1 for core MCP use, but that public app release
   does not understand the version 1 OMP reachability lease or expose its
   harness-neutral Instant delivery setting.

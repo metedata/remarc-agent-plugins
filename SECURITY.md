@@ -2,8 +2,7 @@
 
 ## Supported versions
 
-Only the current public plugin version receives security fixes. Once tagged
-releases begin, this means the latest tagged version.
+Only the latest tagged public plugin version receives security fixes.
 
 ## Reporting a vulnerability
 
@@ -16,7 +15,8 @@ You can expect an acknowledgement within seven days. Critical issues are priorit
 In scope:
 
 - the MCP server and committed distribution bundle;
-- Claude Code and Codex plugin manifests;
+- Claude Code, Codex, and OMP plugin manifests;
+- the OMP `remarc-wake` extension and its pairing lease;
 - lifecycle hooks, marker handling, locking, and automatic delivery;
 - parsing and preservation of Remarc's local data;
 - installer or marketplace behavior owned by this repository;

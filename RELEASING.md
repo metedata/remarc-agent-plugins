@@ -1,6 +1,8 @@
 # Releasing Remarc agent plugins
 
-This repository historically distributed versions directly from `main` without Git tags or GitHub Releases. Use this process for traceable releases going forward.
+Tagged releases are published on GitHub. Use this process to keep plugin
+caches, committed bundles, notices, the vendored Remarc copy, and release tags
+traceable as one coordinated distribution.
 
 ## Version model
 
@@ -24,7 +26,7 @@ the MCP initialize handshake. Keep these two MCP version declarations equal:
 - `plugins/remarc/mcp/src/index.ts`
 
 That MCP implementation version does not currently equal the marketplace
-version (`0.3.0` versus `0.12.0`). Record it in release notes and bump both
+version (`0.3.0` versus `0.12.1`). Record it in release notes and bump both
 declarations together when MCP behavior changes.
 
 Claude Code uses the plugin manifest version as a cache key. Pushing changed plugin files without increasing that version does not update an existing installation.
@@ -49,8 +51,11 @@ Claude Code uses the plugin manifest version as a cache key. Pushing changed plu
    git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist plugins/remarc-wake/dist
    ```
 
-6. Run the shared schema fixture check from [CONTRIBUTING.md](CONTRIBUTING.md) and validate the marketplace with `claude plugin validate .`.
-7. Exercise clean, isolated installs for every supported agent. Record the exact agent versions used. For OMP, use the pinned `omp/17.3.4` binary and the candidate checkout:
+6. Run `node scripts/check-third-party-notices.mjs` and confirm every cached
+   marketplace package contains its license and any notices required by its
+   bundled runtime dependencies.
+7. Run the shared schema fixture check from [CONTRIBUTING.md](CONTRIBUTING.md) and validate the marketplace with `claude plugin validate .`.
+8. Exercise clean, isolated installs for every supported agent. Record the exact agent versions used. For OMP, use the pinned `omp/17.3.4` binary and the candidate checkout:
 
    ```sh
    node scripts/smoke-omp-marketplace.mjs \
@@ -66,7 +71,7 @@ Claude Code uses the plugin manifest version as a cache key. Pushing changed plu
    must prove native OMP session origin without writing an ownerless legacy
    marker; and fresh OMP processes must discover `/remarc-pair` and
    `/remarc-unpair` only while `remarc-wake` is enabled.
-8. Merge only after CI passes on the final commit.
+9. Merge only after CI passes on the final commit.
 
 ## Publish
 

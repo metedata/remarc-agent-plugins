@@ -30,7 +30,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const ompArgument = argumentsByName.get("omp") ?? "omp";
 const ompBinary = ompArgument.includes(sep) ? resolve(ompArgument) : ompArgument;
 const marketplaceSource = argumentsByName.get("marketplace") ?? repositoryRoot;
-const expectedVersion = argumentsByName.get("expected-version") ?? "0.12.0";
+const expectedVersion = argumentsByName.get("expected-version") ?? "0.12.1";
 const keep = argumentsByName.get("keep") === "true";
 const corePluginId = "remarc@remarc";
 const wakePluginId = "remarc-wake@remarc";
@@ -93,6 +93,17 @@ function assertInstalledPackage(item, pluginId, requiredPaths) {
     );
   }
   return installPath;
+}
+
+function assertInstalledDistributionFiles(installPath, sourceDirectory, relativePaths) {
+  for (const relativePath of relativePaths) {
+    const installedFile = readFileSync(resolve(installPath, relativePath));
+    const sourceFile = readFileSync(resolve(repositoryRoot, sourceDirectory, relativePath));
+    assert(
+      installedFile.equals(sourceFile),
+      `installed ${sourceDirectory} package has stale ${relativePath}`
+    );
+  }
 }
 
 function assertCommand(commands, name, source, expected = true) {
@@ -514,11 +525,22 @@ try {
   assert(userWake.shadowedBy === undefined, "user wake install is unexpectedly shadowed");
   const userInstallPath = assertInstalledPackage(userCore, corePluginId, [
     "plugin.json",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md",
     "mcp.json",
     "skills/remarc/SKILL.md",
     "mcp/dist/index.js",
   ]);
-  assertInstalledPackage(userWake, wakePluginId, ["package.json", "dist/index.js"]);
+  const userWakeInstallPath = assertInstalledPackage(userWake, wakePluginId, [
+    "package.json",
+    "LICENSE",
+    "dist/index.js",
+  ]);
+  assertInstalledDistributionFiles(userInstallPath, "plugins/remarc", [
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md",
+  ]);
+  assertInstalledDistributionFiles(userWakeInstallPath, "plugins/remarc-wake", ["LICENSE"]);
 
   let commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
   assertCommand(commands, "skill:remarc", "skill");
@@ -553,11 +575,22 @@ try {
   assert(projectWake.shadowedBy === undefined, "project wake scope is unexpectedly shadowed");
   const projectInstallPath = assertInstalledPackage(projectCore, corePluginId, [
     "plugin.json",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md",
     "mcp.json",
     "skills/remarc/SKILL.md",
     "mcp/dist/index.js",
   ]);
-  assertInstalledPackage(projectWake, wakePluginId, ["package.json", "dist/index.js"]);
+  const projectWakeInstallPath = assertInstalledPackage(projectWake, wakePluginId, [
+    "package.json",
+    "LICENSE",
+    "dist/index.js",
+  ]);
+  assertInstalledDistributionFiles(projectInstallPath, "plugins/remarc", [
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md",
+  ]);
+  assertInstalledDistributionFiles(projectWakeInstallPath, "plugins/remarc-wake", ["LICENSE"]);
 
   commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
   assertCommand(commands, "skill:remarc", "skill");
