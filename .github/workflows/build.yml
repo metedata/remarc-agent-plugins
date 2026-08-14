@@ -10,13 +10,54 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
 
+      - name: verify synchronized public versions
+        run: node scripts/check-public-versions.mjs
+
       - name: build + test remarc MCP
         working-directory: plugins/remarc/mcp
-        run: npm ci && npm test && npm run build
+        run: npm ci && npm audit --audit-level=high && npm test && npm run build
+
+      - name: install pinned OMP
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$(uname -m)" in
+            arm64)
+              omp_asset="omp-darwin-arm64"
+              omp_sha256="76a6c22f8ba4ba319e3d528adcd921949e0338f2b13042721e64b990f6fffe16"
+              ;;
+            x86_64)
+              omp_asset="omp-darwin-x64"
+              omp_sha256="cc295533c32d1e5dc1febe8c5972c1235e41b9614318bec57441d03c475f70c1"
+              ;;
+            *)
+              echo "Unsupported macOS runner architecture: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          omp_directory="$RUNNER_TEMP/omp-17.3.4"
+          mkdir -p "$omp_directory"
+          curl --fail --location --silent --show-error --retry 3 \
+            "https://github.com/can1357/oh-my-pi/releases/download/v17.3.4/$omp_asset" \
+            --output "$omp_directory/omp"
+          printf '%s  %s\n' "$omp_sha256" "$omp_directory/omp" | shasum -a 256 --check
+          chmod +x "$omp_directory/omp"
+          test "$("$omp_directory/omp" --version)" = "omp/17.3.4"
+          echo "$omp_directory" >> "$GITHUB_PATH"
+
+      - name: smoke test OMP marketplace integration
+        run: |
+          test "$(omp --version)" = "omp/17.3.4"
+          node scripts/smoke-omp-marketplace.mjs \
+            --omp "$(command -v omp)" \
+            --marketplace "$GITHUB_WORKSPACE" \
+            --expected-version "$(node -p "require('./plugins/remarc/plugin.json').version")"
 
       - name: build + test remarc-hooks CLI
         working-directory: plugins/remarc-hooks/cli
-        run: npm ci && npm test && npm run build
+        run: npm ci && npm audit --audit-level=high && npm test && npm run build
 
       - name: verify committed dist/ matches build output
         run: |
@@ -28,14 +69,14 @@ jobs:
       - name: install Claude Code
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: validate marketplace
         run: claude plugin validate .
 
       - name: install ajv for fixture validation
         working-directory: plugins/shared
-        run: npm ci
+        run: npm ci && npm audit --audit-level=high
 
       - name: cross-decode schema fixture
         working-directory: plugins/shared

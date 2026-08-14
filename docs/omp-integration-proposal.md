@@ -1,6 +1,7 @@
 # Proposal: OMP integration
 
-**Status:** Proposed. OMP is not currently a supported Remarc integration.
+**Status:** Phase 1 core MCP and skill support implemented. Instant delivery,
+app-side live reachability, and native OMP session origins remain proposed.
 
 **Target reviewed:** OMP 17.3.4 at commit [`ffd53ff`](https://github.com/can1357/oh-my-pi/tree/ffd53ff92a6f575d499730475a73460dd7cc2eea), reviewed 2026-08-14.
 
@@ -10,22 +11,25 @@
 
 Ship OMP support from this repository through OMP's plugin manager. Do not make Remarc.app install files into `~/.omp`, scan OMP profile directories, or own OMP update state.
 
-Use two OMP marketplace entries:
+Use one OMP marketplace entry now and add a second in the wake phase:
 
 - `remarc` - the existing MCP server and Remarc workflow skill, with the Phase 1 harness guard;
-- `remarc-wake` - an optional OMP-only executable extension for explicit pairing and instant delivery.
+- `remarc-wake` - a future optional OMP-only executable extension for explicit pairing and instant delivery.
 
-Keep Claude Code's catalog focused on `remarc` and `remarc-hooks`. Add a separate `.omp-plugin/marketplace.json`, which OMP prefers over the Claude-compatible fallback, so Claude users are not offered an OMP-only extension.
+Keep Claude Code's catalog focused on `remarc` and `remarc-hooks`. The separate
+`.omp-plugin/marketplace.json` currently publishes `remarc` and will later add
+the OMP-only wake extension without offering it to Claude users.
 
 Declare explicit versions for both entries in the OMP catalog. OMP can infer an
 install version from a plugin manifest or package, but its upgrade-all path
 compares catalog entries that declare `version`.
 
-Use one public integration version across the four current plugin manifests,
-the future core OMP manifest, both OMP catalog entries, and the `remarc-wake`
-package. CI must reject a version mismatch. This keeps one repository tag and
-changelog authoritative; the separately advertised MCP implementation version
-remains governed by [RELEASING.md](../RELEASING.md).
+Use one public integration version across the Claude Code and Codex manifests,
+the core Agent Plugins 1.0 `plugin.json`, the current OMP catalog entry, and the
+future `remarc-wake` package and catalog entry. CI must reject a version
+mismatch. This keeps one repository tag and changelog authoritative; the
+separately advertised MCP implementation version remains governed by
+[RELEASING.md](../RELEASING.md).
 
 ## Goals
 
@@ -68,9 +72,9 @@ remarc-agent-plugins/
 └── plugins/
     ├── remarc/
     │   ├── .claude-plugin/plugin.json
-    │   ├── .omp-plugin/plugin.json
-    │   ├── .mcp.json
-    │   ├── omp-mcp.json
+    │   ├── .codex-plugin/plugin.json
+    │   ├── plugin.json
+    │   ├── mcp.json
     │   ├── skills/remarc/SKILL.md
     │   └── mcp/dist/index.js
     └── remarc-wake/
@@ -98,7 +102,12 @@ The wake package declares a built JavaScript entry point so an installation neve
 `0.11.0` is illustrative, not a committed release number. The implemented
 package must use the integration release version selected for that change.
 
-OMP's current marketplace installer can load `omp.extensions` from a marketplace package. Skills use the conventional `skills/<name>/SKILL.md` layout, and OMP substitutes both `${OMP_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_ROOT}` in plugin MCP definitions.
+Phase 1 uses OMP 17.3.4's Agent Plugins 1.0 support: a root `plugin.json`, a
+root `mcp.json`, conventional `skills/<name>/SKILL.md`, and `${PLUGIN_ROOT}`
+expansion into the cached installed package. The later wake package uses OMP's
+native `omp.extensions` package field because executable extensions are outside
+the two portable Agent Plugins 1.0 capability types implemented by this OMP
+baseline.
 
 ## Phase 1: basic MCP and skill
 
@@ -119,7 +128,10 @@ Refresh and verify inside OMP:
 /mcp test remarc:remarc
 ```
 
-OMP namespaces marketplace MCP servers as `<plugin>:<server>`, hence `remarc:remarc`.
+OMP's Agent Plugins provider namespaces MCP servers as `<plugin>:<server>`,
+hence `remarc:remarc`. Its tool bridge then exposes protocol tool names through
+generated agent-callable identifiers; for example, `remarc_list_sessions`
+becomes `mcp__remarc_remarc_remarc_list_sessions`.
 
 ### Session-creation limitation
 
@@ -136,8 +148,9 @@ changed.
 Give OMP an explicit process identity without yet making it a durable session
 origin:
 
-1. declare `.omp-plugin/plugin.json` with `mcpServers: "./omp-mcp.json"`;
-2. have `omp-mcp.json` launch the existing bundle with `--harness omp`;
+1. declare the package with an Agent Plugins 1.0 root `plugin.json`;
+2. declare the stdio server in the Agent Plugins 1.0 root `mcp.json`, launching
+   the existing bundle with `--harness omp`;
 3. recognize `omp` as an MCP caller identity;
 4. in `remarc_create_session`, reject an OMP-owned process before entering the
    document transaction, regardless of any caller-supplied harness value;
@@ -150,11 +163,13 @@ The OMP MCP override is explicit:
 
 ```json
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "remarc": {
+      "type": "stdio",
       "command": "node",
       "args": [
-        "${OMP_PLUGIN_ROOT}/mcp/dist/index.js",
+        "${PLUGIN_ROOT}/mcp/dist/index.js",
         "--harness",
         "omp"
       ]
@@ -167,9 +182,12 @@ Correctly labelled OMP-created sessions require a coordinated later change:
 
 1. widen the shared origin schema and cross-decode fixture;
 2. allow `omp` as a persisted origin and tool-input value, then remove the OMP creation guard;
-3. make resolution attribution harness-aware;
-4. add an OMP origin/badge in the app while preserving unknown values for older builds;
-5. update the skill only after both sides can round-trip the result.
+3. add an OMP origin/badge in the app while preserving unknown values for older builds;
+4. update the skill only after both sides can round-trip the result.
+
+Phase 1 status writes are already attributed from the trusted MCP launch
+identity, so OMP resolutions persist `resolvedBy: "omp"` without depending on
+the caller's tool arguments.
 
 ### Phase 1 acceptance
 
@@ -183,6 +201,19 @@ Correctly labelled OMP-created sessions require a coordinated later change:
   fixture and marker directory byte-identical.
 - Uninstall and reinstall without touching Remarc user data.
 - Test OMP's user and project scopes.
+
+The implemented local Phase 1 smoke uses an exact `omp/17.3.4` binary. It has
+verified user-only and project-shadowed installation, cached-copy provenance,
+enable/disable, uninstall/reinstall, `skill:remarc` discovery, and fresh TUI
+`/mcp list` results showing `remarc:remarc` connected under `Agent Plugins` in
+both scopes. A direct client probe of each cached bundle exercises all seven
+tools: list/get, compare-and-set claim, resolve/reopen/handoff, bulk resolve,
+rename, and guarded create calls with no harness plus spoofed Claude Code and
+Codex inputs. It also proves `resolvedBy: "omp"`, preservation of unknown
+document/session/comment/web-context fields, and restoration of byte-identical
+Remarc data and marker sentinels around the isolated test. The equivalent public
+Git marketplace run remains a post-merge release gate; a local checkout cannot
+prove that distribution path.
 
 ## Phase 2: optional `remarc-wake` extension
 
@@ -314,73 +345,49 @@ After equivalent external tests pass, close or replace PR #3 rather than merging
 
 ## Verification gates
 
-Repository packages:
+Current Phase 1 repository gates:
 
 ```sh
 node scripts/check-public-versions.mjs
 (cd plugins/remarc/mcp && npm ci && npm test && npm run build)
 (cd plugins/remarc-hooks/cli && npm ci && npm test && npm run build)
-(cd plugins/remarc-wake && npm ci && npm run typecheck && npm test && npm run build)
-git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist plugins/remarc-wake/dist
+git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist
 ```
 
-The local pre-publication smoke test must pin 17.3.4 for the required gate and
-run a separate non-blocking canary against the latest OMP. Assert and record
-`omp --version` before testing. Isolate HOME and every XDG root because OMP may
-prefer existing XDG state over `~/.omp`:
+When Phase 2 adds `plugins/remarc-wake`, extend that gate with its exact pinned
+dependency, typecheck, tests, build, and bundle-drift check:
 
 ```sh
-OMP_TEST_ROOT="$(mktemp -d)"
-OMP_MARKETPLACE_ROOT="$(pwd)"
-mkdir -p \
-  "$OMP_TEST_ROOT/home/Library/Application Support/Remarc" \
-  "$OMP_TEST_ROOT/xdg-config" \
-  "$OMP_TEST_ROOT/xdg-data" \
-  "$OMP_TEST_ROOT/xdg-state" \
-  "$OMP_TEST_ROOT/xdg-cache" \
-  "$OMP_TEST_ROOT/project"
-cp plugins/shared/fixtures/comments.sample.json \
-  "$OMP_TEST_ROOT/home/Library/Application Support/Remarc/comments.json"
-
-run_omp() {
-  env \
-    HOME="$OMP_TEST_ROOT/home" \
-    XDG_CONFIG_HOME="$OMP_TEST_ROOT/xdg-config" \
-    XDG_DATA_HOME="$OMP_TEST_ROOT/xdg-data" \
-    XDG_STATE_HOME="$OMP_TEST_ROOT/xdg-state" \
-    XDG_CACHE_HOME="$OMP_TEST_ROOT/xdg-cache" \
-    omp "$@"
-}
-
-OMP_TEST_VERSION="$(run_omp --version)"
-printf '%s\n' "$OMP_TEST_VERSION" | tee "$OMP_TEST_ROOT/omp-version.txt"
-test "$OMP_TEST_VERSION" = "17.3.4"
-run_omp plugin marketplace add "$OMP_MARKETPLACE_ROOT"
-run_omp plugin install remarc@remarc
-run_omp plugin install remarc-wake@remarc
-run_omp plugin list --json
-run_omp plugin doctor
-
-(
-  cd "$OMP_TEST_ROOT/project"
-  run_omp plugin install --scope project remarc@remarc
-  run_omp plugin list --json
-)
+(cd plugins/remarc-wake && npm ci && npm run typecheck && npm test && npm run build)
+git diff --exit-code -- plugins/remarc-wake/dist
 ```
 
-From a fresh OMP process under the same isolated environment, verify skill and
-MCP discovery, `/mcp test remarc:remarc`, extension restart/discovery, user and
-project scopes, project-over-user shadowing, enable/disable, upgrade, uninstall,
-fixture and marker hashes around the rejected create-session calls, and an N-1
-to current version upgrade. The test must delete only its validated temporary
-directory when complete; it must never point cleanup at a real home or profile.
+The Phase 1 smoke script must receive the exact pinned binary; it rejects any
+`omp --version` output other than `omp/17.3.4`. It creates an isolated HOME,
+XDG roots, project, Remarc fixture, and marker sentinel, then deletes only that
+validated temporary root:
 
-The local-directory source above does not satisfy the Git-marketplace acceptance
-gate. Before release, repeat the clean install with `metedata/remarc-agent-plugins`
-or an HTTPS Git fixture containing the exact candidate commit. Assert from the
-machine-readable plugin state that OMP installed the package into its isolated
-marketplace cache, not from the source checkout, then repeat discovery,
-upgrade, uninstall, and user/project-scope checks.
+```sh
+node scripts/smoke-omp-marketplace.mjs \
+  --omp /absolute/path/to/omp \
+  --marketplace "$(pwd)" \
+  --expected-version 0.11.0
+```
+
+That run verifies the candidate checkout's Agent Plugins 1.0 package shape,
+cached installation, user/project scopes and shadowing, skill discovery, fresh
+TUI discovery of connected server `remarc:remarc`, installed MCP behavior,
+enable/disable, uninstall/reinstall, and Remarc-data preservation. A separate
+non-blocking canary may run against the latest OMP, but it does not replace the
+pinned release gate.
+
+The local-directory source does not satisfy the Git-marketplace acceptance
+gate. After merge, repeat the same script with
+`--marketplace metedata/remarc-agent-plugins`. Assert from machine-readable
+plugin state that OMP installed the package into its isolated marketplace cache
+and not from a source checkout. Future release tests must also add an N-1 to
+current upgrade fixture; Phase 2 must add extension restart/discovery and the
+wake-specific acceptance cases above.
 
 App validation for the later app PR:
 
@@ -411,7 +418,9 @@ Then perform the clean Debug build and mandatory relaunch required by the Remarc
 ## Authoritative OMP references
 
 - [Marketplace behavior and commands](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/docs/marketplace.md)
-- [Marketplace package layout and MCP manifests](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/docs/skills/authoring-marketplaces.md)
+- [Marketplace catalogs and package sources](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/docs/skills/authoring-marketplaces.md)
+- [Agent Plugins 1.0 discovery (`plugin.json`, `mcp.json`, and `${PLUGIN_ROOT}`)](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/coding-agent/src/discovery/agent-plugins.ts)
+- [Agent Plugins 1.0 format validation](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/coding-agent/src/discovery/agent-plugin-format.ts)
 - [Extension lifecycle, managed timers, and message delivery](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/docs/extensions.md)
 - [Extension runner shutdown budget](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/coding-agent/src/extensibility/extensions/runner.ts#L95-L114)
 - [`sendMessage` API](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/coding-agent/src/extensibility/extensions/types.ts#L1310-L1320)

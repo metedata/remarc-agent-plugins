@@ -12,9 +12,9 @@ The repository is public under the [MIT License](LICENSE). Remarc itself is also
 | --- | --- | --- | --- |
 | Claude Code | Supported | Optional `remarc-hooks` plugin, experimental | Supported when hooks are paired and the user enables it |
 | Codex | Supported | Not part of the supported app install flow | On demand when the agent calls the MCP tools |
-| OMP | [Proposed](docs/omp-integration-proposal.md) | Proposed external extension | Proposed |
+| OMP | Supported on demand | Not included in core support | [Planned external extension](docs/omp-integration-proposal.md) |
 
-The current verified baseline is recorded in [Compatibility](docs/compatibility.md). A row marked proposed is not a supported installation promise.
+The current verified baseline is recorded in [Compatibility](docs/compatibility.md).
 
 ## Requirements
 
@@ -57,6 +57,19 @@ codex plugin add remarc@remarc
 
 See the [Codex guide](https://docs.remarc.app/agents/codex/) for repair and removal instructions.
 
+### OMP
+
+```sh
+omp plugin marketplace add metedata/remarc-agent-plugins
+omp plugin install remarc@remarc
+```
+
+Then run `/reload-plugins` in OMP and verify the namespaced MCP server with
+`/mcp list` and `/mcp test remarc:remarc`. On the verified OMP 17.3.4 baseline,
+the TUI lists `remarc:remarc` as connected under `Agent Plugins`. See the
+[OMP guide](docs/integrations/omp.md) for project-scoped installation, generated
+tool names, updates, removal, and the current session-creation limitation.
+
 ### Verify the connection
 
 Ask the agent to call `remarc_list_sessions`. A successful response listing the active Remarc sessions proves that the MCP server can read the app's current data.
@@ -81,8 +94,11 @@ Plugins execute with your user account's permissions. Review the source before i
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | Marketplace catalog currently consumed by Claude Code and Codex |
-| `plugins/remarc/` | MCP server, manifests, and the shared Remarc skill |
+| `.claude-plugin/marketplace.json` | Marketplace catalog consumed by Claude Code and Codex |
+| `.omp-plugin/marketplace.json` | OMP catalog that selects the packaged `remarc` integration |
+| `plugins/remarc/plugin.json` | Portable Agent Plugins 1.0 manifest consumed by OMP |
+| `plugins/remarc/mcp.json` | Agent Plugins 1.0 MCP definition; launches the bundled server from `${PLUGIN_ROOT}` |
+| `plugins/remarc/` | MCP server, harness manifests, and the shared Remarc skill |
 | `plugins/remarc-hooks/` | Optional lifecycle and instant-delivery integration |
 | `plugins/shared/` | Data parser, marker protocol, schema fixture, locks, and cross-plugin tests |
 | `docs/` | Architecture, compatibility, and integration proposals |
@@ -96,15 +112,35 @@ The shortest local verification loop is:
 ```sh
 (cd plugins/remarc/mcp && npm ci && npm test && npm run build)
 (cd plugins/remarc-hooks/cli && npm ci && npm test && npm run build)
+node scripts/check-public-versions.mjs
 git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist
 claude plugin validate .
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contract and fixture checks. Do not run a marketplace installation smoke test against your normal agent profile. CI currently performs the Claude Code smoke test in an isolated runner; Codex clean-install coverage is a documented gap.
+The OMP smoke script requires the pinned `omp/17.3.4` binary and creates its
+own temporary HOME, XDG roots, project, and Remarc fixture:
+
+```sh
+node scripts/smoke-omp-marketplace.mjs \
+  --omp /absolute/path/to/omp \
+  --marketplace "$(pwd)" \
+  --expected-version 0.11.0
+```
+
+That local-source run proves packaging before publication. After the candidate
+commit is merged, repeat it with
+`--marketplace metedata/remarc-agent-plugins` to prove the public Git
+marketplace path and cached installed artifact. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full contract and fixture checks. Do
+not run a marketplace installation smoke test against your normal agent
+profile. Codex clean-install coverage remains a documented gap.
 
 ## Releases
 
-The public distribution version is shared by the four plugin manifests. The MCP server also exposes its own implementation version in the initialize handshake; private npm packages are not independently published.
+The public distribution version is shared by every supported-harness manifest,
+the portable Agent Plugins manifest, and the OMP catalog entry. The MCP server
+also exposes its own implementation version in the initialize handshake;
+private npm packages are not independently published.
 
 See [CHANGELOG.md](CHANGELOG.md) and [RELEASING.md](RELEASING.md). The repository did not historically publish tags or GitHub Releases; the documented process is the baseline for making future versions traceable.
 

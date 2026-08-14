@@ -25,9 +25,11 @@ the user from the Remarc app, created by chat through MCP, or created by an
 installed integration. Do not assume the session's origin.
 
 Use `remarc_create_session` only when the user asks to start a Remarc session
-mid-conversation and the current Claude Code session ID is available. Do not
-invent a session ID. For existing work, list sessions first and reuse the
-matching or active session when appropriate.
+mid-conversation and a supported Claude Code or Codex session ID is available.
+Do not invent a session ID. OMP cannot create a correctly labelled Remarc
+session yet: ask the user to create or select one in the Remarc app, call
+`remarc_list_sessions`, and reuse the matching or active session. For existing
+work in any harness, list sessions first and reuse the match when appropriate.
 
 There is no exposed MCP tool to stop, close, or delete a session. If the user
 asks to stop a session, explain that MCP cannot do that directly and point them
@@ -123,7 +125,13 @@ future identification or the user asks.
 Use when the user asks to start a Remarc session during an existing
 conversation. Provide a short session name and your own agent session ID from
 session context. The new session becomes active, and future Remarc comments can
-attach to subsequent messages through the Remarc integration.
+be fetched through the Remarc MCP tools. Automatic attachment to later prompts
+requires an active lifecycle integration; without one, fetch comments on demand.
+
+When running in OMP, never call this tool. The OMP-owned MCP process rejects
+session creation even if a caller supplies `harness: "claudeCode"` or
+`harness: "codex"`. Ask the user to create or select a session in Remarc, then
+call `remarc_list_sessions` and reuse it.
 
 Always pass `harness`: `"codex"` if you are Codex, `"claudeCode"` if you are
 Claude Code. The server cannot work this out. One MCP server answers whichever
@@ -133,8 +141,8 @@ session shows that label in Remarc.
 
 Do not create a new session just because the user asks to inspect, summarize, or
 address existing comments. List sessions first and use the matching session. If
-the current Claude Code session ID is unavailable, say that you cannot create a
-linked session from MCP without it.
+the current supported agent session ID is unavailable, say that you cannot
+create a linked session from MCP without it.
 
 ## Status Lifecycle
 

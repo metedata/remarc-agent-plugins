@@ -17,6 +17,7 @@ The repository is not a root npm workspace. Install and test each package indepe
 ```sh
 (cd plugins/remarc/mcp && npm ci && npm test && npm run build)
 (cd plugins/remarc-hooks/cli && npm ci && npm test && npm run build)
+node scripts/check-public-versions.mjs
 ```
 
 Both packages consume shared source through checked-in symlinks under their `src/` directories. Make shared data, marker, and notification changes in `plugins/shared/`, not in a symlinked path.

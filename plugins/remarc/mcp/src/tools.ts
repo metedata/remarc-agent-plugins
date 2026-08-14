@@ -29,6 +29,12 @@ function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
 }
 
+/** Durable resolution attribution from the trusted server launch identity. */
+function currentResolver(): string {
+  const harness = currentHarness();
+  return harness === "claudeCode" ? "claude" : harness;
+}
+
 function errorResult(text: string) {
   return { content: [{ type: "text" as const, text }], isError: true as const };
 }
@@ -339,7 +345,7 @@ export function registerTools(server: McpServer): void {
         if (comment.status === status) {
           return { kind: "noop" as const, shortID: comment.shortID };
         }
-        applyStatusUpdate(comment, status, summary, new Date());
+        applyStatusUpdate(comment, status, summary, new Date(), currentResolver());
         return { kind: "ok" as const, shortID: comment.shortID };
       });
 
@@ -468,7 +474,7 @@ export function registerTools(server: McpServer): void {
 
       for (const { comment, summary: commentSummary } of targets) {
         if (comment.status === status) continue; // skip no-ops
-        applyStatusUpdate(comment, status, commentSummary, now);
+        applyStatusUpdate(comment, status, commentSummary, now, currentResolver());
         results.push(comment.shortID);
       }
 
@@ -533,7 +539,7 @@ export function registerTools(server: McpServer): void {
   // 7. remarc_create_session — create a new session mid-chat
   server.registerTool("remarc_create_session", {
     description:
-      "Create a new Remarc session and link it to this agent session. Use when the user asks to start a Remarc session mid-conversation. Comments made in Remarc will be attached to subsequent messages.",
+      "Create a new Remarc session and link it to this agent session. Supported for Claude Code and Codex only. OMP must create or select the session in Remarc and reuse it with remarc_list_sessions.",
     inputSchema: {
       name: z.string().describe("Session name (e.g. directory name or task description)."),
       claude_session_id: z.string().describe("Your agent session ID (provided in your session context)."),
@@ -545,6 +551,18 @@ export function registerTools(server: McpServer): void {
         ),
     },
   }, async ({ name, claude_session_id, harness }) => {
+    // The process identity comes from the harness-specific manifest. Tool input
+    // is model-controlled and cannot override this boundary. Keep this check
+    // ahead of withDocument so OMP can never persist a false Claude/Codex
+    // origin or touch the data/marker files while native OMP origins are not
+    // supported by the shared schema and app.
+    const serverHarness = currentHarness();
+    if (serverHarness === "omp") {
+      return errorResult(
+        "OMP cannot create Remarc sessions yet. Create or select a session in the Remarc app, then use remarc_list_sessions to reuse it."
+      );
+    }
+
     try {
       const created = await withDocument((state) => {
       const MAX_ACTIVE_SESSIONS = 8;
@@ -603,7 +621,7 @@ export function registerTools(server: McpServer): void {
         // connection - and those differ whenever one agent runs inside another.
         // `claudeCodeSessionId` keeps its name for schema compatibility but
         // holds whichever harness's session id this is.
-        origin: harness ?? currentHarness(),
+        origin: harness ?? serverHarness,
         claudeCodeSessionId: claude_session_id,
         unknownFields: {},
       });

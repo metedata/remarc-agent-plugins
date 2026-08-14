@@ -10,6 +10,14 @@ describe("currentHarness", () => {
     expect(currentHarness({})).toBe("codex");
   });
 
+  it("recognises OMP only from the explicit manifest declaration", () => {
+    setHarnessFromArgv(["node", "index.js", "--harness", "omp"]);
+    expect(currentHarness({
+      CLAUDE_PLUGIN_ROOT: "/Users/m/.claude/plugins/x",
+      CODEX_HOME: "/Users/m/.codex",
+    })).toBe("omp");
+  });
+
   it("ignores a declaration it does not recognise", () => {
     setHarnessFromArgv(["node", "index.js", "--harness", "somethingElse"]);
     expect(currentHarness({ CLAUDE_PLUGIN_ROOT: "/x" })).toBe("claudeCode");
