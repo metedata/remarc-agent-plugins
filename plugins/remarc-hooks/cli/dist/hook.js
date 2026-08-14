@@ -519,6 +519,13 @@ async function withDocument(mutate) {
     await releaseLock(lockPath);
   }
 }
+function typeIdentifier(t) {
+  if ("comment" in t) return "comment";
+  if ("screenshot" in t) return "screenshot";
+  if ("critMode" in t) return "critMode";
+  if ("webElement" in t) return "webElement";
+  return "quickNote";
+}
 
 // ../../shared/notify.ts
 import { execFile } from "node:child_process";
@@ -691,11 +698,19 @@ function formatComments(comments, state, maxChars) {
   let used = lines.join("\n").length;
   for (const c of comments) {
     const entry = [];
+    const type = typeIdentifier(c.type);
+    const hasBody = c.commentText.trim().length > 0;
     entry.push(`### ${c.shortID} (id: ${c.id})`);
-    const body = c.commentText.trim().length === 0 ? NO_COMMENT_BODY : wrapUntrusted(c.commentText);
+    entry.push(`Type: ${type}`);
+    const body = hasBody ? wrapUntrusted(c.commentText) : NO_COMMENT_BODY;
     entry.push(`Comment text: ${body}`);
     if (c.type && "comment" in c.type) {
       entry.push(`Selected text: ${wrapUntrusted(c.type.comment.text)}`);
+    }
+    if (!hasBody && ["comment", "screenshot", "webElement"].includes(type)) {
+      entry.push(
+        `Full context: call remarc_get_comment with id "${c.id}" before acting.`
+      );
     }
     if (c.source) entry.push(`Source: ${wrapUntrusted(c.source)}`);
     const session = sessionsById.get(c.sessionID.toUpperCase());

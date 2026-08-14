@@ -58,11 +58,52 @@ describe("formatComments reference-only contract", () => {
     const rendered = formatComments([comment], state(comment), 9000);
 
     expect(rendered.includedIds).toEqual([comment.id]);
+    expect(rendered.text).toContain("Type: comment");
     expect(rendered.text).toContain("Comment text: (none)");
+    expect(rendered.text).toContain(
+      `Full context: call remarc_get_comment with id "${comment.id}" before acting.`
+    );
     const selected = rendered.text.match(
       /Selected text: <<<REMARC-DATA-([0-9a-f]{8})>>>\n([\s\S]*?)\n<<<END-\1>>>/
     );
     expect(selected?.[2]).toBe(selectedText);
+  });
+
+  it("identifies a blank screenshot and directs the agent to its full context", () => {
+    const comment: Comment = {
+      ...selectedComment(""),
+      type: { screenshot: { imagePath: "images/capture.png" } },
+      source: "Screenshot",
+    };
+
+    const rendered = formatComments([comment], state(comment), 9000);
+
+    expect(rendered.text).toContain("Type: screenshot");
+    expect(rendered.text).toContain("Comment text: (none)");
+    expect(rendered.text).toContain(
+      `Full context: call remarc_get_comment with id "${comment.id}" before acting.`
+    );
+  });
+
+  it("identifies a blank web element and fetches context without injecting page data", () => {
+    const pageUrl = "https://private.example/review";
+    const elementName = "SECRET PAGE ELEMENT";
+    const comment: Comment = {
+      ...selectedComment(""),
+      type: { webElement: { componentName: "SaveButton", filePath: "Editor.tsx" } },
+      source: "Web Element",
+      webContext: { pageUrl, elementName },
+    };
+
+    const rendered = formatComments([comment], state(comment), 9000);
+
+    expect(rendered.text).toContain("Type: webElement");
+    expect(rendered.text).toContain("Comment text: (none)");
+    expect(rendered.text).toContain(
+      `Full context: call remarc_get_comment with id "${comment.id}" before acting.`
+    );
+    expect(rendered.text).not.toContain(pageUrl);
+    expect(rendered.text).not.toContain(elementName);
   });
 
   it("labels and sentinel-wraps a present body", () => {
@@ -70,6 +111,8 @@ describe("formatComments reference-only contract", () => {
 
     const rendered = formatComments([comment], state(comment), 9000);
 
+    expect(rendered.text).toContain("Type: comment");
+    expect(rendered.text).not.toContain("Full context: call remarc_get_comment");
     const body = rendered.text.match(
       /Comment text: <<<REMARC-DATA-([0-9a-f]{8})>>>\n([\s\S]*?)\n<<<END-\1>>>/
     );
