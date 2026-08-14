@@ -25,11 +25,11 @@ the user from the Remarc app, created by chat through MCP, or created by an
 installed integration. Do not assume the session's origin.
 
 Use `remarc_create_session` only when the user asks to start a Remarc session
-mid-conversation and a supported Claude Code or Codex session ID is available.
-Do not invent a session ID. OMP cannot create a correctly labelled Remarc
-session yet: ask the user to create or select one in the Remarc app, call
-`remarc_list_sessions`, and reuse the matching or active session. For existing
-work in any harness, list sessions first and reuse the match when appropriate.
+mid-conversation. Claude Code and Codex must provide their real agent session
+ID; do not invent one. OMP may omit the legacy session ID because its trusted
+MCP process records `origin: "omp"`, then the user can run `/remarc-pair` to
+enable instant delivery. For existing work in any harness, list sessions first
+and reuse the match when appropriate.
 
 There is no exposed MCP tool to stop, close, or delete a session. If the user
 asks to stop a session, explain that MCP cannot do that directly and point them
@@ -124,14 +124,16 @@ future identification or the user asks.
 
 Use when the user asks to start a Remarc session during an existing
 conversation. Provide a short session name and your own agent session ID from
-session context. The new session becomes active, and future Remarc comments can
-be fetched through the Remarc MCP tools. Automatic attachment to later prompts
-requires an active lifecycle integration; without one, fetch comments on demand.
+session context when running in Claude Code or Codex. The new session becomes
+active, and future Remarc comments can be fetched through the Remarc MCP tools.
+Automatic attachment to later prompts requires an active lifecycle integration;
+without one, fetch comments on demand.
 
-When running in OMP, never call this tool. The OMP-owned MCP process rejects
-session creation even if a caller supplies `harness: "claudeCode"` or
-`harness: "codex"`. Ask the user to create or select a session in Remarc, then
-call `remarc_list_sessions` and reuse it.
+When running in OMP, omit `claude_session_id` and `harness`; the OMP-owned MCP
+process uses its trusted launch identity and ignores caller attempts to spoof a
+Claude Code or Codex origin. If the optional `remarc-wake` plugin is installed,
+tell the user to run `/remarc-pair` in that OMP session for instant delivery;
+otherwise continue through MCP on demand.
 
 Always pass `harness`: `"codex"` if you are Codex, `"claudeCode"` if you are
 Claude Code. The server cannot work this out. One MCP server answers whichever
@@ -140,9 +142,10 @@ Claude Code's server and is labelled Claude Code unless you say otherwise. The
 session shows that label in Remarc.
 
 Do not create a new session just because the user asks to inspect, summarize, or
-address existing comments. List sessions first and use the matching session. If
-the current supported agent session ID is unavailable, say that you cannot
-create a linked session from MCP without it.
+address existing comments. List sessions first and use the matching session. In
+Claude Code or Codex, if the current agent session ID is unavailable, say that
+you cannot create a linked session from MCP without it. OMP does not require
+that legacy field.
 
 ## Status Lifecycle
 
@@ -179,14 +182,14 @@ resolution summary.
 4. Choose the mode. For read-only requests, skip status updates and answer from
    the fetched comments.
 5. In addressing mode, immediately mark every fetched `open` comment as
-   `handedOff` with a short summary such as "Accepted by Codex for addressing."
+   `handedOff`. Use a short summary such as "Accepted for addressing" only
+   when the tool surface retains metadata for that transition.
    Use `remarc_bulk_set_status` when available; otherwise call
    `remarc_set_status` for each comment.
 6. Work one comment at a time:
    - Choose existing `inProgress` comments first, then `handedOff` comments in
      their displayed or created order.
-   - Before starting a `handedOff` comment, set it to `inProgress` with a brief
-     summary of the work you are beginning.
+   - Before starting a `handedOff` comment, set it to `inProgress`.
    - Read the comment text and quoted reference carefully.
    - Identify the target artifact and what "done" means for this comment.
    - Take the smallest coherent action that addresses the feedback.

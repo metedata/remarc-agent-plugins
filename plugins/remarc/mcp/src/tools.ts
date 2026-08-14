@@ -539,10 +539,13 @@ export function registerTools(server: McpServer): void {
   // 7. remarc_create_session — create a new session mid-chat
   server.registerTool("remarc_create_session", {
     description:
-      "Create a new Remarc session and link it to this agent session. Supported for Claude Code and Codex only. OMP must create or select the session in Remarc and reuse it with remarc_list_sessions.",
+      "Create a new Remarc session for Claude Code, Codex, or OMP. OMP sessions use the trusted server identity and pair separately for instant delivery.",
     inputSchema: {
       name: z.string().describe("Session name (e.g. directory name or task description)."),
-      claude_session_id: z.string().describe("Your agent session ID (provided in your session context)."),
+      claude_session_id: z
+        .string()
+        .optional()
+        .describe("Your agent session ID. Required for Claude Code and Codex; OMP pairing is owned by remarc-wake."),
       harness: z
         .enum(["claudeCode", "codex"])
         .optional()
@@ -551,82 +554,81 @@ export function registerTools(server: McpServer): void {
         ),
     },
   }, async ({ name, claude_session_id, harness }) => {
-    // The process identity comes from the harness-specific manifest. Tool input
-    // is model-controlled and cannot override this boundary. Keep this check
-    // ahead of withDocument so OMP can never persist a false Claude/Codex
-    // origin or touch the data/marker files while native OMP origins are not
-    // supported by the shared schema and app.
     const serverHarness = currentHarness();
-    if (serverHarness === "omp") {
+    // OMP's Agent Plugins manifest is a trusted process boundary. A
+    // model-controlled Claude/Codex override must never relabel an OMP-owned
+    // server. Nested Claude/Codex sessions keep their existing override path.
+    const sessionOrigin = serverHarness === "omp"
+      ? "omp"
+      : (harness ?? serverHarness);
+
+    if (serverHarness !== "omp" && !claude_session_id) {
       return errorResult(
-        "OMP cannot create Remarc sessions yet. Create or select a session in the Remarc app, then use remarc_list_sessions to reuse it."
+        "claude_session_id is required when creating a Claude Code or Codex session."
       );
     }
 
     try {
       const created = await withDocument((state) => {
-      const MAX_ACTIVE_SESSIONS = 8;
+        const MAX_ACTIVE_SESSIONS = 8;
 
-      // Deduplicate name
-      const activeSessions = state.sessions.filter(
-        (s) => !s.isDeleted && !s.isAutoDismissed
-      );
+        // Deduplicate name
+        const activeSessions = state.sessions.filter(
+          (s) => !s.isDeleted && !s.isAutoDismissed
+        );
 
-      const existingNames = new Set(
-        activeSessions.filter((s) => s.origin === "claudeCode").map((s) => s.name)
-      );
-      let finalName = name;
-      if (existingNames.has(name)) {
-        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        for (const letter of letters) {
-          const candidate = `${name} ${letter}`;
-          if (!existingNames.has(candidate)) {
-            finalName = candidate;
-            break;
+        const existingNames = new Set(
+          activeSessions.filter((s) => s.origin === sessionOrigin).map((s) => s.name)
+        );
+        let finalName = name;
+        if (existingNames.has(name)) {
+          const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+          for (const letter of letters) {
+            const candidate = `${name} ${letter}`;
+            if (!existingNames.has(candidate)) {
+              finalName = candidate;
+              break;
+            }
           }
         }
-      }
 
-      // Check session limit
-      if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
-        const claudeSessions = activeSessions
-          .filter((s) => s.origin === "claudeCode")
-          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        if (claudeSessions.length > 0) {
-          const oldest = claudeSessions[0];
-          const idx = state.sessions.findIndex((s) => s.id === oldest.id);
-          if (idx !== -1) {
-            state.sessions[idx].isAutoDismissed = true;
-            state.sessions[idx].autoDismissedAt = new Date();
+        // Check session limit
+        if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
+          const integrationSessions = activeSessions
+            .filter((s) => s.origin === sessionOrigin)
+            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+          if (integrationSessions.length > 0) {
+            const oldest = integrationSessions[0];
+            const idx = state.sessions.findIndex((s) => s.id === oldest.id);
+            if (idx !== -1) {
+              state.sessions[idx].isAutoDismissed = true;
+              state.sessions[idx].autoDismissedAt = new Date();
+            }
+          } else {
+            return { ok: false as const };
           }
-        } else {
-          return { ok: false as const };
         }
-      }
 
-      // Create session
-      const sessionId = randomUUID().toUpperCase();
-      const now = new Date();
-      state.sessions.push({
-        id: sessionId,
-        name: finalName,
-        createdAt: now,
-        isDeleted: false,
-        deletedAt: null,
-        isAutoDismissed: false,
-        autoDismissedAt: null,
-        // The caller's own answer wins, because only the caller knows. Server
-        // detection reads the process it was launched in, which is the harness
-        // that *started the server*, not the agent on the other end of the
-        // connection - and those differ whenever one agent runs inside another.
-        // `claudeCodeSessionId` keeps its name for schema compatibility but
-        // holds whichever harness's session id this is.
-        origin: harness ?? serverHarness,
-        claudeCodeSessionId: claude_session_id,
-        unknownFields: {},
-      });
-      state.activeSessionID = sessionId;
-      return { ok: true as const, sessionId, finalName };
+        // Create session
+        const sessionId = randomUUID().toUpperCase();
+        const now = new Date();
+        state.sessions.push({
+          id: sessionId,
+          name: finalName,
+          createdAt: now,
+          isDeleted: false,
+          deletedAt: null,
+          isAutoDismissed: false,
+          autoDismissedAt: null,
+          // `claudeCodeSessionId` keeps its legacy name for schema compatibility.
+          // OMP's optional wake extension owns its session-scoped lease instead,
+          // so core OMP creation deliberately leaves this field empty.
+          origin: sessionOrigin,
+          claudeCodeSessionId: serverHarness === "omp" ? null : claude_session_id!,
+          unknownFields: {},
+        });
+        state.activeSessionID = sessionId;
+        return { ok: true as const, sessionId, finalName };
       });
 
       if (!created.ok) {
@@ -634,16 +636,28 @@ export function registerTools(server: McpServer): void {
       }
       notifyRemarcReload();
 
-      // Marker so the hooks pick this session's comments up. Same JSON format
-      // the hooks write, so mid-chat linking and wake delivery share one file.
-      await writeMarker(claude_session_id, {
-        remarcSessionId: created.sessionId,
-        dataFilePath: getDataFilePath(),
-      });
+      if (serverHarness !== "omp") {
+        // Claude/Codex lifecycle integrations use the historical marker. OMP's
+        // optional wake extension owns an explicit token-leased pairing and
+        // must never be replaced by this ownerless legacy marker.
+        await writeMarker(claude_session_id!, {
+          remarcSessionId: created.sessionId,
+          dataFilePath: getDataFilePath(),
+        });
+      }
+
+      if (serverHarness === "omp") {
+        return textResult(
+          `Created Remarc session "${created.finalName}" (id: ${created.sessionId}). ` +
+          "It is now active. If the optional remarc-wake plugin is installed, " +
+          "run /remarc-pair in this OMP session to enable instant delivery; otherwise use MCP on demand."
+        );
+      }
 
       return textResult(
         `Created Remarc session "${created.finalName}" (id: ${created.sessionId}). ` +
-        `It's now the active session — comments you make in Remarc will be attached to your messages.`
+        "It is now active. Future comments can be fetched through the Remarc MCP tools; " +
+        "an installed lifecycle integration may attach them automatically."
       );
     } catch (err) {
       return errorResult(String(err));

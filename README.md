@@ -12,13 +12,16 @@ The repository is public under the [MIT License](LICENSE). Remarc itself is also
 | --- | --- | --- | --- |
 | Claude Code | Supported | Optional `remarc-hooks` plugin, experimental | Supported when hooks are paired and the user enables it |
 | Codex | Supported | Not part of the supported app install flow | On demand when the agent calls the MCP tools |
-| OMP | Supported on demand | Not included in core support | [Planned external extension](docs/omp-integration-proposal.md) |
+| OMP | Supported | Optional `remarc-wake` plugin | Supported with Remarc 1.1.0+ when explicitly paired and enabled |
 
 The current verified baseline is recorded in [Compatibility](docs/compatibility.md).
 
 ## Requirements
 
-- macOS with the latest [Remarc release](https://github.com/metedata/Remarc/releases/latest) installed and launched at least once.
+- macOS with [Remarc](https://github.com/metedata/Remarc/releases/latest)
+  installed and launched at least once. Core OMP MCP access works with 1.0.1;
+  native OMP badges and `remarc-wake` instant delivery require Remarc 1.1.0 or
+  later.
 - Node.js available as `node`. The committed bundles target Node 18; CI currently builds and tests with Node 22.
 - A supported agent CLI for marketplace installation.
 
@@ -62,13 +65,16 @@ See the [Codex guide](https://docs.remarc.app/agents/codex/) for repair and remo
 ```sh
 omp plugin marketplace add metedata/remarc-agent-plugins
 omp plugin install remarc@remarc
+omp plugin install remarc-wake@remarc
 ```
 
 Then run `/reload-plugins` in OMP and verify the namespaced MCP server with
 `/mcp list` and `/mcp test remarc:remarc`. On the verified OMP 17.3.4 baseline,
 the TUI lists `remarc:remarc` as connected under `Agent Plugins`. See the
 [OMP guide](docs/integrations/omp.md) for project-scoped installation, generated
-tool names, updates, removal, and the current session-creation limitation.
+tool names, native session creation, explicit pairing, updates, and removal.
+Restart OMP after installing or upgrading `remarc-wake`, then run
+`/remarc-pair` while the intended Remarc session is active.
 
 ### Verify the connection
 
@@ -78,6 +84,9 @@ Ask the agent to call `remarc_list_sessions`. A successful response listing the 
 
 - **`remarc`** - the required MCP server and workflow skill. It lists sessions and comments, fetches captured context, updates statuses with compare-and-set support, renames sessions, and creates linked sessions for currently supported harnesses.
 - **`remarc-hooks`** - an optional, experimental lifecycle plugin. Claude Code can pair a conversation with one Remarc session, inject outstanding comments, and receive an explicit instant-delivery request.
+- **`remarc-wake`** - an optional OMP extension for explicit token-leased
+  pairing, heartbeat-based liveness, and durable replay of instant-delivery
+  requests across interrupted sessions.
 - **Shared contracts** - the schema, locking, marker, and forward-compatibility rules used across the app and plugins.
 
 See [Architecture](docs/architecture.md) for the ownership boundary and runtime data flow. The MCP tool behavior is documented in the [Remarc MCP tools reference](https://docs.remarc.app/agents/mcp-tools-reference/).
@@ -95,11 +104,12 @@ Plugins execute with your user account's permissions. Review the source before i
 | Path | Contents |
 | --- | --- |
 | `.claude-plugin/marketplace.json` | Marketplace catalog consumed by Claude Code and Codex |
-| `.omp-plugin/marketplace.json` | OMP catalog that selects the packaged `remarc` integration |
+| `.omp-plugin/marketplace.json` | OMP catalog for the core `remarc` and optional `remarc-wake` packages |
 | `plugins/remarc/plugin.json` | Portable Agent Plugins 1.0 manifest consumed by OMP |
 | `plugins/remarc/mcp.json` | Agent Plugins 1.0 MCP definition; launches the bundled server from `${PLUGIN_ROOT}` |
 | `plugins/remarc/` | MCP server, harness manifests, and the shared Remarc skill |
 | `plugins/remarc-hooks/` | Optional lifecycle and instant-delivery integration |
+| `plugins/remarc-wake/` | Optional OMP pairing and instant-delivery extension |
 | `plugins/shared/` | Data parser, marker protocol, schema fixture, locks, and cross-plugin tests |
 | `docs/` | Architecture, compatibility, and integration proposals |
 
@@ -112,8 +122,9 @@ The shortest local verification loop is:
 ```sh
 (cd plugins/remarc/mcp && npm ci && npm test && npm run build)
 (cd plugins/remarc-hooks/cli && npm ci && npm test && npm run build)
+(cd plugins/remarc-wake && npm ci && npm run typecheck && npm test && npm run build)
 node scripts/check-public-versions.mjs
-git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist
+git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist plugins/remarc-wake/dist
 claude plugin validate .
 ```
 
@@ -124,7 +135,7 @@ own temporary HOME, XDG roots, project, and Remarc fixture:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.11.0
+  --expected-version 0.12.0
 ```
 
 That local-source run proves packaging before publication. After the candidate

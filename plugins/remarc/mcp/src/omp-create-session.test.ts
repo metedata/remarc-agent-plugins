@@ -8,7 +8,7 @@ import { resetHarnessForTests, setHarnessFromArgv } from "./harness.js";
 
 type CreateSessionInput = {
   name: string;
-  claude_session_id: string;
+  claude_session_id?: string;
   harness?: "claudeCode" | "codex";
 };
 
@@ -18,9 +18,6 @@ type ToolResult = {
 };
 
 type CreateSessionHandler = (input: CreateSessionInput) => Promise<ToolResult>;
-
-const ERROR_TEXT =
-  "OMP cannot create Remarc sessions yet. Create or select a session in the Remarc app, then use remarc_list_sessions to reuse it.";
 
 let home: string;
 let previousHome: string | undefined;
@@ -73,52 +70,101 @@ afterEach(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
-describe.sequential("OMP session-creation guard", () => {
+describe.sequential("OMP native session creation", () => {
   it.each([
     ["without a caller override", undefined],
     ["with a spoofed Claude Code override", "claudeCode" as const],
     ["with a spoofed Codex override", "codex" as const],
-  ])("rejects %s before touching Remarc data", async (_label, harness) => {
-    const dataBefore = await readFile(dataFile);
+  ])("creates an OMP-labelled session %s", async (_label, harness) => {
     const markersBefore = await markerSnapshot();
 
     const result = await createSession({
-      name: "Wrong Origin",
-      claude_session_id: "omp-session-1",
+      name: "Native OMP",
       ...(harness ? { harness } : {}),
     });
 
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toContain("/remarc-pair");
+
+    const raw = JSON.parse(await readFile(dataFile, "utf8"));
+    const created = raw.sessions.find((session: { name: string }) => session.name === "Native OMP");
+    expect(created).toMatchObject({
+      name: "Native OMP",
+      origin: "omp",
+      claudeCodeSessionId: null,
+      isDeleted: false,
+      isAutoDismissed: false,
+    });
+    expect(raw.activeSessionID).toBe(created.id);
+    expect(raw.futureTop).toEqual({ keep: true });
+    expect(raw.sessions[0].futureSession).toBe("keep");
+    expect(raw.comments[0].futureComment).toBe("keep");
+    expect(await markerSnapshot()).toEqual(markersBefore);
+  });
+
+  it("still requires the legacy agent session id outside OMP before writing", async () => {
+    setHarnessFromArgv(["node", "index.js", "--harness", "claudeCode"]);
+    const dataBefore = await readFile(dataFile);
+    const markersBefore = await markerSnapshot();
+
+    const result = await createSession({ name: "Missing ID" });
+
     expect(result).toEqual({
-      content: [{ type: "text", text: ERROR_TEXT }],
+      content: [{
+        type: "text",
+        text: "claude_session_id is required when creating a Claude Code or Codex session.",
+      }],
       isError: true,
     });
     expect(await readFile(dataFile)).toEqual(dataBefore);
     expect(await markerSnapshot()).toEqual(markersBefore);
   });
 
-  it("returns immediately even when the document transaction is held", async () => {
-    const lockDir = `${dataFile}.lock`;
-    await mkdir(lockDir);
-    const ownerBytes = Buffer.from(JSON.stringify({ pid: process.pid, at: Date.now() }));
-    await writeFile(join(lockDir, "owner.json"), ownerBytes);
-    const dataBefore = await readFile(dataFile);
+  it("preserves the Claude/Codex override path and legacy marker behavior", async () => {
+    setHarnessFromArgv(["node", "index.js", "--harness", "claudeCode"]);
 
-    const result = await Promise.race([
-      createSession({
-        name: "Spoof Attempt",
-        claude_session_id: "omp-session-2",
-        harness: "claudeCode",
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("OMP guard entered the document transaction")), 250)
-      ),
-    ]);
-
-    expect(result).toEqual({
-      content: [{ type: "text", text: ERROR_TEXT }],
-      isError: true,
+    const result = await createSession({
+      name: "Nested Codex",
+      claude_session_id: "codex-session-1",
+      harness: "codex",
     });
-    expect(await readFile(dataFile)).toEqual(dataBefore);
-    expect(await readFile(join(lockDir, "owner.json"))).toEqual(ownerBytes);
+
+    expect(result.isError).toBeUndefined();
+    const raw = JSON.parse(await readFile(dataFile, "utf8"));
+    const created = raw.sessions.find((session: { name: string }) => session.name === "Nested Codex");
+    expect(created).toMatchObject({
+      origin: "codex",
+      claudeCodeSessionId: "codex-session-1",
+    });
+    const marker = JSON.parse(
+      await readFile(join(markerDir, "codex-session-1.json"), "utf8")
+    );
+    expect(marker.remarcSessionId).toBe(created.id);
+  });
+
+  it("deduplicates and auto-dismisses sessions within the native OMP origin", async () => {
+    for (let index = 0; index < 8; index += 1) {
+      const result = await createSession({ name: "OMP Review" });
+      expect(result.isError).toBeUndefined();
+    }
+
+    const raw = JSON.parse(await readFile(dataFile, "utf8"));
+    const manual = raw.sessions.find((session: { id: string }) => session.id === "S1");
+    const ompSessions = raw.sessions.filter((session: { origin: string }) => session.origin === "omp");
+    expect(manual.isAutoDismissed).toBe(false);
+    expect(ompSessions).toHaveLength(8);
+    expect(ompSessions[0].isAutoDismissed).toBe(true);
+    expect(ompSessions.slice(1).every((session: { isAutoDismissed: boolean }) => !session.isAutoDismissed))
+      .toBe(true);
+    expect(ompSessions.map((session: { name: string }) => session.name)).toEqual([
+      "OMP Review",
+      "OMP Review A",
+      "OMP Review B",
+      "OMP Review C",
+      "OMP Review D",
+      "OMP Review E",
+      "OMP Review F",
+      "OMP Review G",
+    ]);
   });
 });

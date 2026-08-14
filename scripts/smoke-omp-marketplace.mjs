@@ -30,8 +30,10 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const ompArgument = argumentsByName.get("omp") ?? "omp";
 const ompBinary = ompArgument.includes(sep) ? resolve(ompArgument) : ompArgument;
 const marketplaceSource = argumentsByName.get("marketplace") ?? repositoryRoot;
-const expectedVersion = argumentsByName.get("expected-version") ?? "0.11.0";
+const expectedVersion = argumentsByName.get("expected-version") ?? "0.12.0";
 const keep = argumentsByName.get("keep") === "true";
+const corePluginId = "remarc@remarc";
+const wakePluginId = "remarc-wake@remarc";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -58,35 +60,52 @@ function run(args, { cwd, env }) {
   return result.stdout.trim();
 }
 
-function marketplaceEntries(list) {
-  return list.marketplace.filter((item) => item.id === "remarc@remarc");
+function marketplaceEntries(list, pluginId) {
+  return list.marketplace.filter((item) => item.id === pluginId);
 }
 
-function assertScope(list, scope, expected) {
-  const item = marketplaceEntries(list).find((candidate) => candidate.scope === scope);
+function assertScope(list, pluginId, scope, expected) {
+  const item = marketplaceEntries(list, pluginId).find((candidate) => candidate.scope === scope);
   if (!expected) {
-    assert(item === undefined, `unexpected ${scope} Remarc installation`);
+    assert(item === undefined, `unexpected ${scope} ${pluginId} installation`);
     return undefined;
   }
-  assert(item, `missing ${scope} Remarc installation`);
-  assert(item.entries.length === 1, `${scope} installation has unexpected entry count`);
-  assert(item.entries[0].scope === scope, `${scope} installation reports the wrong scope`);
-  assert(item.entries[0].version === expectedVersion, `${scope} installation has the wrong version`);
+  assert(item, `missing ${scope} ${pluginId} installation`);
+  assert(item.entries.length === 1, `${scope} ${pluginId} installation has unexpected entry count`);
+  assert(item.entries[0].scope === scope, `${scope} ${pluginId} installation reports the wrong scope`);
+  assert(
+    item.entries[0].version === expectedVersion,
+    `${scope} ${pluginId} installation has the wrong version`
+  );
   return item;
 }
 
-function assertInstalledPackage(item) {
+function assertInstalledPackage(item, pluginId, requiredPaths) {
   const installPath = item.entries[0].installPath;
-  assert(lstatSync(installPath).isDirectory(), "OMP cache target is not a directory");
-  assert(!lstatSync(installPath).isSymbolicLink(), "OMP cache target is a symlink");
-  assert(!isWithin(installPath, repositoryRoot), "OMP cache target points into the source checkout");
-  for (const relativePath of ["plugin.json", "mcp.json", "skills/remarc/SKILL.md", "mcp/dist/index.js"]) {
-    assert(existsSync(resolve(installPath, relativePath)), `installed plugin is missing ${relativePath}`);
+  const target = lstatSync(installPath);
+  assert(target.isDirectory(), `${pluginId} cache target is not a directory`);
+  assert(!target.isSymbolicLink(), `${pluginId} cache target is a symlink`);
+  assert(!isWithin(installPath, repositoryRoot), `${pluginId} cache target points into the source checkout`);
+  for (const relativePath of requiredPaths) {
+    assert(
+      existsSync(resolve(installPath, relativePath)),
+      `installed ${pluginId} package is missing ${relativePath}`
+    );
   }
   return installPath;
 }
 
-async function discoverInOmp({ cwd, env }) {
+function assertCommand(commands, name, source, expected = true) {
+  const found = commands.some((command) => command.name === name && command.source === source);
+  assert(
+    found === expected,
+    expected
+      ? `OMP did not discover /${name} from ${source}`
+      : `OMP unexpectedly discovered /${name} from ${source}`
+  );
+}
+
+async function availableCommandsInOmp({ cwd, env }) {
   return new Promise((resolveDiscovery, rejectDiscovery) => {
     const child = spawn(
       ompBinary,
@@ -96,16 +115,13 @@ async function discoverInOmp({ cwd, env }) {
     let stdoutBuffer = "";
     let stderr = "";
     let ready = false;
-    let foundSkill = false;
-    let nextId = 0;
+    let commands;
     let settled = false;
-    let pollTimer;
     let timeoutTimer;
 
     const finish = (error) => {
       if (settled) return;
       settled = true;
-      clearInterval(pollTimer);
       clearTimeout(timeoutTimer);
       if (!child.stdin.destroyed) child.stdin.end();
       if (error) {
@@ -114,24 +130,12 @@ async function discoverInOmp({ cwd, env }) {
       }
     };
 
-    const checkDone = () => {
-      if (foundSkill) finish();
-    };
-
     const inspectFrame = (frame) => {
       if (frame.type === "ready") ready = true;
-      const commands =
-        frame.type === "available_commands_update"
-          ? frame.commands
-          : frame.type === "response" && frame.command === "get_available_commands"
-            ? frame.data?.commands
-            : undefined;
-      if (Array.isArray(commands)) {
-        foundSkill ||= commands.some(
-          (command) => command.name === "skill:remarc" && command.source === "skill"
-        );
+      if (frame.type === "available_commands_update" && Array.isArray(frame.commands)) {
+        commands = frame.commands;
+        finish();
       }
-      checkDone();
     };
 
     child.stdout.setEncoding("utf8");
@@ -164,20 +168,19 @@ async function discoverInOmp({ cwd, env }) {
         rejectDiscovery(new Error(`OMP RPC exited ${code ?? signal}\n${stderr}`));
         return;
       }
-      resolveDiscovery({ ready, foundSkill });
+      if (!ready || !Array.isArray(commands)) {
+        rejectDiscovery(
+          new Error(`OMP RPC command discovery was incomplete (ready=${ready}, commands=${Array.isArray(commands)})`)
+        );
+        return;
+      }
+      resolveDiscovery(commands);
     });
 
-    pollTimer = setInterval(() => {
-      if (!ready || child.stdin.destroyed) return;
-      nextId += 1;
-      child.stdin.write(
-        `${JSON.stringify({ id: `commands-${nextId}`, type: "get_available_commands" })}\n`
-      );
-    }, 400);
     timeoutTimer = setTimeout(() => {
       finish(
         new Error(
-          `OMP did not discover the Remarc skill within 15 seconds (ready=${ready}, skill=${foundSkill})\n${stderr}`
+          `OMP did not publish available commands within 15 seconds (ready=${ready})\n${stderr}`
         )
       );
     }, 15_000);
@@ -294,25 +297,32 @@ async function probeInstalledMcp({ serverPath, env, dataPath, markerDirectory })
       "installed MCP could not list the seeded session"
     );
 
-    for (const harness of [undefined, "claudeCode", "codex"]) {
-      const rejected = await client.callTool({
+    for (const [name, harness] of [
+      ["Native OMP", undefined],
+      ["Spoof-resistant OMP", "claudeCode"],
+      ["Codex-spoof-resistant OMP", "codex"],
+    ]) {
+      const created = await client.callTool({
         name: "remarc_create_session",
         arguments: {
-          name: "Wrong OMP origin",
-          claude_session_id: "omp-smoke-session",
+          name,
+          ...(harness ? { claude_session_id: "omp-smoke-session" } : {}),
           ...(harness ? { harness } : {}),
         },
       });
-      const rejectionText = resultText(rejected);
-      assert(rejected.isError === true, "OMP create-session guard did not return an MCP error");
+      assert(created.isError !== true, `OMP could not create ${name}`);
       assert(
-        rejectionText.includes("OMP cannot create Remarc sessions yet"),
-        "OMP create-session guard returned the wrong error"
+        resultText(created).includes("/remarc-pair"),
+        "OMP creation response omitted pairing guidance"
       );
+      const createdDocument = JSON.parse(readFileSync(dataPath, "utf8"));
+      const createdSession = createdDocument.sessions.find((session) => session.name === name);
       assert(
-        readFileSync(dataPath).equals(dataBefore),
-        `OMP create-session guard changed comments.json bytes for ${harness ?? "no harness"}`
+        createdSession?.origin === "omp" && createdSession.claudeCodeSessionId === null,
+        `OMP creation persisted the wrong origin for ${harness ?? "no harness"}`
       );
+      assert(createdDocument.futureTop?.keep === true, "OMP creation dropped an unknown top-level field");
+      assert(createdDocument.sessions[0].futureSession === "keep", "OMP creation dropped an unknown session field");
     }
 
     const comments = await client.callTool({
@@ -486,21 +496,34 @@ try {
     cwd: project,
     env: isolatedEnvironment,
   });
-  run(["plugin", "install", "--scope", "user", "remarc@remarc"], {
-    cwd: project,
-    env: isolatedEnvironment,
-  });
+  for (const pluginId of [corePluginId, wakePluginId]) {
+    run(["plugin", "install", "--scope", "user", pluginId], {
+      cwd: project,
+      env: isolatedEnvironment,
+    });
+  }
 
   let list = JSON.parse(
     run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment })
   );
-  const user = assertScope(list, "user", true);
-  assertScope(list, "project", false);
-  assert(user.shadowedBy === undefined, "user install is unexpectedly shadowed");
-  const userInstallPath = assertInstalledPackage(user);
+  const userCore = assertScope(list, corePluginId, "user", true);
+  const userWake = assertScope(list, wakePluginId, "user", true);
+  assertScope(list, corePluginId, "project", false);
+  assertScope(list, wakePluginId, "project", false);
+  assert(userCore.shadowedBy === undefined, "user core install is unexpectedly shadowed");
+  assert(userWake.shadowedBy === undefined, "user wake install is unexpectedly shadowed");
+  const userInstallPath = assertInstalledPackage(userCore, corePluginId, [
+    "plugin.json",
+    "mcp.json",
+    "skills/remarc/SKILL.md",
+    "mcp/dist/index.js",
+  ]);
+  assertInstalledPackage(userWake, wakePluginId, ["package.json", "dist/index.js"]);
 
-  let discovery = await discoverInOmp({ cwd: project, env: isolatedEnvironment });
-  assert(discovery.ready && discovery.foundSkill, "OMP user-scope skill discovery was incomplete");
+  let commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
+  assertCommand(commands, "skill:remarc", "skill");
+  assertCommand(commands, "remarc-pair", "extension");
+  assertCommand(commands, "remarc-unpair", "extension");
   await discoverMcpInTui({ cwd: project, env: isolatedEnvironment });
   await probeInstalledMcp({
     serverPath: resolve(userInstallPath, "mcp/dist/index.js"),
@@ -509,18 +532,37 @@ try {
     markerDirectory,
   });
 
-  run(["plugin", "install", "--scope", "project", "remarc@remarc"], {
-    cwd: project,
-    env: isolatedEnvironment,
-  });
+  for (const pluginId of [corePluginId, wakePluginId]) {
+    run(["plugin", "install", "--scope", "project", pluginId], {
+      cwd: project,
+      env: isolatedEnvironment,
+    });
+  }
   list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
-  const projectEntry = assertScope(list, "project", true);
-  assert(assertScope(list, "user", true).shadowedBy === "project", "project scope does not shadow user scope");
-  assert(projectEntry.shadowedBy === undefined, "project scope is unexpectedly shadowed");
-  const projectInstallPath = assertInstalledPackage(projectEntry);
+  const projectCore = assertScope(list, corePluginId, "project", true);
+  const projectWake = assertScope(list, wakePluginId, "project", true);
+  assert(
+    assertScope(list, corePluginId, "user", true).shadowedBy === "project",
+    "project core install does not shadow user scope"
+  );
+  assert(
+    assertScope(list, wakePluginId, "user", true).shadowedBy === "project",
+    "project wake install does not shadow user scope"
+  );
+  assert(projectCore.shadowedBy === undefined, "project core scope is unexpectedly shadowed");
+  assert(projectWake.shadowedBy === undefined, "project wake scope is unexpectedly shadowed");
+  const projectInstallPath = assertInstalledPackage(projectCore, corePluginId, [
+    "plugin.json",
+    "mcp.json",
+    "skills/remarc/SKILL.md",
+    "mcp/dist/index.js",
+  ]);
+  assertInstalledPackage(projectWake, wakePluginId, ["package.json", "dist/index.js"]);
 
-  discovery = await discoverInOmp({ cwd: project, env: isolatedEnvironment });
-  assert(discovery.ready && discovery.foundSkill, "OMP project-scope skill discovery was incomplete");
+  commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
+  assertCommand(commands, "skill:remarc", "skill");
+  assertCommand(commands, "remarc-pair", "extension");
+  assertCommand(commands, "remarc-unpair", "extension");
   await discoverMcpInTui({ cwd: project, env: isolatedEnvironment });
   await probeInstalledMcp({
     serverPath: resolve(projectInstallPath, "mcp/dist/index.js"),
@@ -534,53 +576,144 @@ try {
   );
   assert(!doctor.some((check) => check.status === "error"), "OMP plugin doctor reported an error");
 
-  run(["plugin", "disable", "--scope", "project", "remarc@remarc"], {
+  run(["plugin", "disable", "--scope", "project", wakePluginId], {
     cwd: project,
     env: isolatedEnvironment,
   });
   list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
-  assert(assertScope(list, "project", true).entries[0].enabled === false, "project disable failed");
-  assert(assertScope(list, "user", true).shadowedBy === undefined, "disabled project still shadows user");
+  assert(
+    assertScope(list, wakePluginId, "project", true).entries[0].enabled === false,
+    "project wake disable failed"
+  );
+  assert(
+    assertScope(list, wakePluginId, "user", true).shadowedBy === undefined,
+    "disabled project wake still shadows user wake"
+  );
+  commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
+  assertCommand(commands, "remarc-pair", "extension");
+  assertCommand(commands, "remarc-unpair", "extension");
 
-  run(["plugin", "enable", "--scope", "project", "remarc@remarc"], {
+  run(["plugin", "disable", "--scope", "user", wakePluginId], {
     cwd: project,
     env: isolatedEnvironment,
   });
   list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
-  assert(assertScope(list, "project", true).entries[0].enabled === true, "project enable failed");
-  assert(assertScope(list, "user", true).shadowedBy === "project", "re-enabled project does not shadow user");
+  assert(
+    assertScope(list, wakePluginId, "user", true).entries[0].enabled === false,
+    "user wake disable failed"
+  );
+  commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
+  assertCommand(commands, "skill:remarc", "skill");
+  assertCommand(commands, "remarc-pair", "extension", false);
+  assertCommand(commands, "remarc-unpair", "extension", false);
 
-  run(["plugin", "uninstall", "--scope", "project", "remarc@remarc"], {
+  run(["plugin", "enable", "--scope", "user", wakePluginId], {
     cwd: project,
     env: isolatedEnvironment,
   });
   list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
-  assertScope(list, "project", false);
-  assertScope(list, "user", true);
+  assert(
+    assertScope(list, wakePluginId, "user", true).entries[0].enabled === true,
+    "user wake enable failed"
+  );
+  commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
+  assertCommand(commands, "remarc-pair", "extension");
+  assertCommand(commands, "remarc-unpair", "extension");
 
-  run(["plugin", "install", "--scope", "project", "remarc@remarc"], {
-    cwd: project,
-    env: isolatedEnvironment,
-  });
-  run(["plugin", "uninstall", "--scope", "project", "remarc@remarc"], {
-    cwd: project,
-    env: isolatedEnvironment,
-  });
-  run(["plugin", "uninstall", "--scope", "user", "remarc@remarc"], {
+  run(["plugin", "enable", "--scope", "project", wakePluginId], {
     cwd: project,
     env: isolatedEnvironment,
   });
   list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
-  assertScope(list, "project", false);
-  assertScope(list, "user", false);
+  assert(
+    assertScope(list, wakePluginId, "project", true).entries[0].enabled === true,
+    "project wake enable failed"
+  );
+  assert(
+    assertScope(list, wakePluginId, "user", true).shadowedBy === "project",
+    "re-enabled project wake does not shadow user wake"
+  );
+
+  run(["plugin", "disable", "--scope", "project", corePluginId], {
+    cwd: project,
+    env: isolatedEnvironment,
+  });
+  list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
+  assert(
+    assertScope(list, corePluginId, "project", true).entries[0].enabled === false,
+    "project core disable failed"
+  );
+  assert(
+    assertScope(list, corePluginId, "user", true).shadowedBy === undefined,
+    "disabled project core still shadows user core"
+  );
+  run(["plugin", "enable", "--scope", "project", corePluginId], {
+    cwd: project,
+    env: isolatedEnvironment,
+  });
+  list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
+  assert(
+    assertScope(list, corePluginId, "project", true).entries[0].enabled === true,
+    "project core enable failed"
+  );
+  assert(
+    assertScope(list, corePluginId, "user", true).shadowedBy === "project",
+    "re-enabled project core does not shadow user core"
+  );
+
+  for (const pluginId of [wakePluginId, corePluginId]) {
+    run(["plugin", "uninstall", "--scope", "project", pluginId], {
+      cwd: project,
+      env: isolatedEnvironment,
+    });
+  }
+  list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
+  assertScope(list, corePluginId, "project", false);
+  assertScope(list, wakePluginId, "project", false);
+  assertScope(list, corePluginId, "user", true);
+  assertScope(list, wakePluginId, "user", true);
+
+  for (const pluginId of [corePluginId, wakePluginId]) {
+    run(["plugin", "install", "--scope", "project", pluginId], {
+      cwd: project,
+      env: isolatedEnvironment,
+    });
+  }
+  list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
+  assertInstalledPackage(assertScope(list, wakePluginId, "project", true), wakePluginId, [
+    "package.json",
+    "dist/index.js",
+  ]);
+  assert(
+    assertScope(list, wakePluginId, "user", true).shadowedBy === "project",
+    "reinstalled project wake does not shadow user wake"
+  );
+
+  for (const scope of ["project", "user"]) {
+    for (const pluginId of [wakePluginId, corePluginId]) {
+      run(["plugin", "uninstall", "--scope", scope, pluginId], {
+        cwd: project,
+        env: isolatedEnvironment,
+      });
+    }
+  }
+  list = JSON.parse(run(["plugin", "list", "--json"], { cwd: project, env: isolatedEnvironment }));
+  for (const pluginId of [corePluginId, wakePluginId]) {
+    assertScope(list, pluginId, "project", false);
+    assertScope(list, pluginId, "user", false);
+  }
   assert(readFileSync(dataPath, "utf8") === initialDocument, "plugin lifecycle changed Remarc data");
   assert(
     readFileSync(resolve(markerDirectory, "sentinel.json"), "utf8") === '{"futureMarker":"keep"}\n',
     "plugin lifecycle changed the marker sentinel"
   );
+  assert(
+    JSON.stringify(readdirSync(markerDirectory).sort()) === JSON.stringify(["sentinel.json"]),
+    "plugin lifecycle created an unexpected Remarc marker"
+  );
 
   console.log(
-    `OMP ${expectedVersion} marketplace smoke passed: user/project lifecycle, skill, namespaced MCP tools, and guarded installed runtime`
+    `OMP ${expectedVersion} marketplace smoke passed: core and wake user/project lifecycle, cached packages, commands, MCP tools, and marker isolation`
   );
 } finally {
   if (keep) console.log(`kept isolated OMP profile at ${smokeRoot}`);

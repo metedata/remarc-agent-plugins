@@ -62,9 +62,9 @@ In an active OMP session, run:
 /skill:remarc
 ```
 
-OMP can read and update existing sessions. Create or select the session in the
-Remarc app first; the OMP MCP server deliberately rejects linked-session
-creation until the app and shared schema support an OMP session origin.
+OMP can read and update existing sessions and create sessions with native
+`origin: "omp"`. The trusted OMP launch identity supplies that origin; the
+legacy Claude/Codex session-id field is not required.
 
 The OMP catalog installs this directory as the package root. OMP 17.3.4 reads
 the root `plugin.json`, loads the root `mcp.json`, expands `${PLUGIN_ROOT}` to
@@ -109,9 +109,11 @@ The core MCP plugin works without hooks.
 
 ## Current limits
 
-- Correctly labelled session creation currently supports Claude Code and Codex only.
-- OMP core MCP and skill support is available, but linked-session creation and
-  instant delivery are not yet supported.
+- Correctly labelled session creation supports Claude Code, Codex, and OMP.
+  OMP creation relies on the trusted server identity, leaves the legacy
+  `claudeCodeSessionId` empty, and pairs separately through `remarc-wake`.
+- OMP instant delivery is optional and requires the separately installed
+  `remarc-wake` extension plus a Remarc build that understands its v1 lease.
 - Screenshot paths are local to the Mac running Remarc and may be unavailable to a remote agent.
 - The plugin reads and writes local Remarc data; tool results are processed by the configured agent provider.
 

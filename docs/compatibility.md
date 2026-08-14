@@ -12,8 +12,8 @@ skill discovery, TUI MCP discovery, and the installed MCP bundle.
 
 | Component | Baseline |
 | --- | --- |
-| Remarc | 1.0.1 |
-| Remarc plugins | 0.11.0 |
+| Remarc | 1.0.1 for core OMP; 1.1.0 candidate for OMP badge and instant delivery |
+| Remarc plugins | 0.12.0 (this release); 0.11.0 is the prior baseline |
 | macOS | Remarc's minimum is macOS 14.0 |
 | CI Node.js | 22 |
 | Bundle target | Node.js 18 |
@@ -39,18 +39,19 @@ repository's CI.
 | --- | --- | --- | --- |
 | Marketplace installation | Supported | Supported | Supported |
 | `remarc` skill | Supported | Supported | Supported |
-| Remarc MCP tools | Supported | Supported | Supported except session creation |
-| Create a correctly labelled linked session | Supported | Supported | Not supported |
-| Automatic start/prompt context injection | Experimental, optional | Not in the supported app flow | Not proposed in phase 1 |
-| Instant delivery to an idle agent | Experimental, optional | Not supported | Proposed |
+| Remarc MCP tools | Supported | Supported | Supported |
+| Create a correctly labelled session | Supported | Supported | Supported; instant pairing remains explicit |
+| Automatic start/prompt context injection | Experimental, optional | Not in the supported app flow | No; optional wake queues explicit requests only |
+| Instant delivery to an idle agent | Experimental, optional | Not supported | Optional `remarc-wake` extension with Remarc 1.1.0+ |
 | Settings install/status UI | Supported | Supported | Not planned for the first integration |
 
 OMP core support is distributed through its own catalog and uses the existing
 MCP bundle and skill. Its package root follows Agent Plugins 1.0:
 `plugins/remarc/plugin.json` declares the plugin and
 `plugins/remarc/mcp.json` launches the bundle from `${PLUGIN_ROOT}`. The
-optional wake extension, app-side live reachability, and persisted OMP session
-origin remain separate planned phases.
+optional wake extension and app-side live reachability remain separately
+installable, while the shared schema and MCP runtime preserve native OMP
+session origin.
 
 ## Supported installation commands
 
@@ -80,6 +81,7 @@ OMP:
 ```sh
 omp plugin marketplace add metedata/remarc-agent-plugins
 omp plugin install remarc@remarc
+omp plugin install remarc-wake@remarc
 ```
 
 Refresh with `/reload-plugins`, then verify `/mcp list` shows the
@@ -114,8 +116,12 @@ Lifecycle or instant-delivery support additionally requires session-scoped routi
 - Core-only Codex fetches comments on demand through MCP; it does not inject them automatically or wake an idle session.
 - The optional hooks are experimental and use agent lifecycle surfaces that can change independently.
 - Session origin and attribution still contain legacy Claude-named fields; new harnesses must not silently reuse a false origin.
-- OMP cannot call `remarc_create_session`; create or select the session in the
-  Remarc app and reuse it through `remarc_list_sessions`.
+- OMP-created sessions use native `origin: "omp"`. Run `/remarc-pair` after
+  creation when that conversation should receive instant delivery.
+- OMP instant delivery requires Remarc 1.1.0 or later. Plugin 0.12.0 may be
+  installed alongside Remarc 1.0.1 for core MCP use, but that public app release
+  does not understand the version 1 OMP reachability lease or expose its
+  harness-neutral Instant delivery setting.
 - Status updates retain a summary only for `resolved`; an `inProgress` summary
   supplied by the current skill is discarded by the data writer.
 

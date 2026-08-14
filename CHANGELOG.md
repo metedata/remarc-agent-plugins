@@ -9,6 +9,44 @@ handshake and is recorded separately when it changes.
 
 ## Unreleased
 
+## 0.12.0 - 2026-08-15
+
+### Added
+
+- Added the optional `remarc-wake` OMP extension with explicit
+  `/remarc-pair` and `/remarc-unpair` commands, managed lifecycle timers,
+  session-scoped file watching, and next-turn delivery. Instant delivery
+  requires Remarc 1.1.0 or later; Remarc 1.0.1 remains compatible with the
+  core OMP MCP integration.
+- Added a versioned OMP lease with token/PID/heartbeat ownership, atomic
+  cross-marker pairing claims, owner-token compare-and-set cleanup, and a
+  durable pending-wake outbox that replays after interruption.
+- Added native OMP session creation and `origin: "omp"` across the MCP runtime,
+  shared schema, cross-language fixtures, workflow skill, and installed-runtime
+  smoke tests.
+- Added adversarial coverage for lock contention, unsafe marker paths, competing
+  owners, lease expiry, generation ordering, payload limits, restart replay,
+  and bounded shutdown.
+
+### Changed
+
+- Bumped the public integration version to 0.12.0 and the MCP implementation
+  version to 0.3.0.
+- Moved wake selection and marker serialization into shared, forward-compatible
+  modules used by Claude Code and OMP.
+- OMP session creation now trusts only the OMP-owned server identity, ignores
+  model-controlled Claude/Codex origin spoofing, leaves the legacy session-id
+  field empty, and avoids ownerless historical markers.
+- Extended CI and the pinned OMP 17.3.4 marketplace smoke to build, install,
+  discover, disable, re-enable, and remove the optional wake extension.
+
+### Documentation
+
+- Published OMP core, native-session, instant-delivery, update, removal, data,
+  security, compatibility, and release-verification instructions.
+- Recorded the external plugin-manager architecture that replaces the
+  app-coupled PR #3 prototype.
+
 ## 0.11.0 - 2026-08-14
 
 ### Added

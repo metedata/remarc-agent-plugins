@@ -20,7 +20,7 @@
           "deletedAt": { "type": ["string", "number", "null"] },
           "isAutoDismissed": { "type": "boolean" },
           "autoDismissedAt": { "type": ["string", "number", "null"] },
-          "origin": { "type": "string", "enum": ["manual", "claudeCode", "codex"] },
+          "origin": { "type": "string", "enum": ["manual", "claudeCode", "codex", "omp"] },
           "claudeCodeSessionId": { "type": ["string", "null"] }
         }
       }
