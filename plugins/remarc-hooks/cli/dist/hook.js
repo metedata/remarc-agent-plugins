@@ -242,6 +242,7 @@ function appleToDate(timestamp) {
 function dateToApple(date) {
   return date.getTime() / 1e3 - APPLE_EPOCH_OFFSET;
 }
+var NO_COMMENT_BODY = "(none)";
 function getDataDir() {
   return join(homedir(), "Library", "Application Support", "Remarc");
 }
@@ -691,7 +692,8 @@ function formatComments(comments, state, maxChars) {
   for (const c of comments) {
     const entry = [];
     entry.push(`### ${c.shortID} (id: ${c.id})`);
-    entry.push(wrapUntrusted(c.commentText));
+    const body = c.commentText.trim().length === 0 ? NO_COMMENT_BODY : wrapUntrusted(c.commentText);
+    entry.push(`Comment text: ${body}`);
     if (c.type && "comment" in c.type) {
       entry.push(`Selected text: ${wrapUntrusted(c.type.comment.text)}`);
     }
@@ -852,20 +854,25 @@ function buildWakePayload(candidates) {
   let used = lines.join("\n").length;
   for (const c of chosen) {
     const name = sentinelWrap(c.sessionName);
-    const body = sentinelWrap(c.text);
+    const hasBody = c.text.trim().length > 0;
+    const body = hasBody ? sentinelWrap(c.text) : null;
     const entry = [
       `- id: ${c.id}`,
       `  session: ${name.block}`,
-      `  comment: ${body.block}`,
+      `  comment: ${body?.block ?? NO_COMMENT_BODY}`,
       ""
     ].join("\n");
     if (used + entry.length > MAX_WAKE_CHARS) {
       if (includedIds.length === 0) {
         const room = Math.max(200, MAX_WAKE_CHARS - used - 300);
-        const cut = sentinelWrap(c.text.slice(0, room));
         lines.push(`- id: ${c.id}`);
         lines.push(`  session: ${name.block}`);
-        lines.push(`  comment (truncated - fetch the full text with remarc_get_comment): ${cut.block}`);
+        if (hasBody) {
+          const cut = sentinelWrap(c.text.slice(0, room));
+          lines.push(`  comment (truncated - fetch the full text with remarc_get_comment): ${cut.block}`);
+        } else {
+          lines.push(`  comment: ${NO_COMMENT_BODY}`);
+        }
         lines.push("");
         includedIds.push(c.id);
       }

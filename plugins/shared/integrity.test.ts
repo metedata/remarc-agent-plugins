@@ -93,6 +93,38 @@ describe("unknown-field passthrough", () => {
     const doc = JSON.parse(await readFile(dataFile, "utf8"));
     expect(doc.comments[0].wakeRequestedAt).toBeCloseTo(stamp, 3);
   });
+
+  it("round-trips a reference-only comment with an empty required body", async () => {
+    const selectedText = "the complete selected reference";
+    await writeFile(
+      dataFile,
+      JSON.stringify(
+        baseDoc({
+          comments: [
+            {
+              ...baseDoc().comments[0],
+              type: { comment: { text: selectedText } },
+              commentText: "",
+            },
+          ],
+        })
+      )
+    );
+
+    await withDocument((state) => {
+      expect(state.comments[0].commentText).toBe("");
+      expect(state.comments[0].type).toEqual({
+        comment: { text: selectedText },
+      });
+      state.comments[0].status = "inProgress";
+    });
+
+    const doc = JSON.parse(await readFile(dataFile, "utf8"));
+    expect(doc.comments[0].commentText).toBe("");
+    expect(doc.comments[0].type).toEqual({
+      comment: { text: selectedText },
+    });
+  });
 });
 
 describe("withDocument transaction", () => {

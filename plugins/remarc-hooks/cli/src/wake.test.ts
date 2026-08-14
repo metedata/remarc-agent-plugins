@@ -169,6 +169,29 @@ describe("buildWakePayload", () => {
     expect(text).not.toContain("selectedText");
   });
 
+  it("marks an absent body without copying reference or page context", () => {
+    const selectedText = "SECRET COMPLETE SELECTED REFERENCE";
+    const pageUrl = "https://private.example/review";
+    const elementName = "SECRET PAGE ELEMENT";
+    const s = state([
+      comment({
+        id: "A",
+        type: { comment: { text: selectedText } },
+        commentText: "",
+        webContext: { pageUrl, elementName },
+      }),
+    ]);
+
+    const candidates = selectWakeCandidates(s, marker());
+    const { text } = buildWakePayload(candidates);
+
+    expect(text).toContain("comment: (none)");
+    expect(text).not.toContain(selectedText);
+    expect(text).not.toContain(pageUrl);
+    expect(text).not.toContain(elementName);
+    expect(text).toContain("Read full context with remarc_get_comment(id)");
+  });
+
   it("caps the batch and leaves the remainder unrecorded", () => {
     const many = Array.from({ length: 25 }, (_, i) => cand(`id-${i}`));
     const { includedIds } = buildWakePayload(many);

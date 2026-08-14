@@ -14,6 +14,7 @@ import {
   SKIP_WRITE,
   getDataFilePath,
   applyStatusUpdate,
+  NO_COMMENT_BODY,
 } from "./data.js";
 import { notifyRemarcReload } from "./notify.js";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -228,7 +229,11 @@ export function formatComments(
   for (const c of comments) {
     const entry: string[] = [];
     entry.push(`### ${c.shortID} (id: ${c.id})`);
-    entry.push(wrapUntrusted(c.commentText));
+    const body =
+      c.commentText.trim().length === 0
+        ? NO_COMMENT_BODY
+        : wrapUntrusted(c.commentText);
+    entry.push(`Comment text: ${body}`);
     if (c.type && "comment" in c.type) {
       entry.push(`Selected text: ${wrapUntrusted(c.type.comment.text)}`);
     }

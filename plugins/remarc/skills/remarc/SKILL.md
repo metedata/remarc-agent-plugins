@@ -79,6 +79,21 @@ Use when a listed comment is ambiguous, long, screenshot-based, already
 resolved, or needs exact metadata. It accepts a full UUID or the short ID shown
 by Remarc.
 
+A context-backed comment may have no separate instruction body. List and detail
+output render that body as `(none)`; this is a valid reference-only comment, not
+a missing or corrupt record. List output keeps contextual references compact.
+For a text-selection comment, `remarc_get_comment` returns the complete value as
+`Selected Text`, separately from the bounded `Reference` preview and the
+optional `Text` body.
+
+Use the user's surrounding request as the action across reference-only comments
+(for example, "review these" or "fix the selected issues"). If a wake reminder
+or isolated comment supplies neither a body nor a surrounding action, fetch the
+full context and ask what the user wants done rather than inventing an action.
+Reference-only comments are valid for selections, screenshots, and web
+elements. Quick Notes should have text because they carry no separate context;
+if an old or malformed empty Quick Note appears, do not guess its intent.
+
 For screenshot comments, use the returned image path with the platform's image
 viewing tool when visual inspection matters.
 
@@ -179,7 +194,8 @@ resolution summary.
      their displayed or created order.
    - Before starting a `handedOff` comment, set it to `inProgress` with a brief
      summary of the work you are beginning.
-   - Read the comment text and quoted reference carefully.
+   - Read the comment body and contextual reference carefully. When the body is
+     `(none)`, apply the user's surrounding request to the reference itself.
    - Identify the target artifact and what "done" means for this comment.
    - Take the smallest coherent action that addresses the feedback.
    - Check the result in a way that fits the work:

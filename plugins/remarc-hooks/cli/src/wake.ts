@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { readAppState, type Comment, type AppState } from "./data.js";
+import {
+  readAppState,
+  NO_COMMENT_BODY,
+  type Comment,
+  type AppState,
+} from "./data.js";
 import {
   readAllMarkers,
   updateMarker,
@@ -126,11 +131,12 @@ export function buildWakePayload(candidates: WakeCandidate[]): {
   let used = lines.join("\n").length;
   for (const c of chosen) {
     const name = sentinelWrap(c.sessionName);
-    const body = sentinelWrap(c.text);
+    const hasBody = c.text.trim().length > 0;
+    const body = hasBody ? sentinelWrap(c.text) : null;
     const entry = [
       `- id: ${c.id}`,
       `  session: ${name.block}`,
-      `  comment: ${body.block}`,
+      `  comment: ${body?.block ?? NO_COMMENT_BODY}`,
       "",
     ].join("\n");
 
@@ -140,10 +146,14 @@ export function buildWakePayload(candidates: WakeCandidate[]): {
         // point at MCP for the rest. The UUID reached the agent, so it counts
         // as delivered.
         const room = Math.max(200, MAX_WAKE_CHARS - used - 300);
-        const cut = sentinelWrap(c.text.slice(0, room));
         lines.push(`- id: ${c.id}`);
         lines.push(`  session: ${name.block}`);
-        lines.push(`  comment (truncated - fetch the full text with remarc_get_comment): ${cut.block}`);
+        if (hasBody) {
+          const cut = sentinelWrap(c.text.slice(0, room));
+          lines.push(`  comment (truncated - fetch the full text with remarc_get_comment): ${cut.block}`);
+        } else {
+          lines.push(`  comment: ${NO_COMMENT_BODY}`);
+        }
         lines.push("");
         includedIds.push(c.id);
       }

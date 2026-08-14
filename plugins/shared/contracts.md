@@ -22,11 +22,20 @@ These keys are read by the plugin via the `defaults read` shell-out. The app own
 
 | Field | Written by | Meaning |
 |---|---|---|
+| `commentText` | app | Required string. `""` is a valid reference-only comment for every context-backed type: text selection (`comment`), screenshot, and web element. It must not be dropped or decoded as missing. App writers normalize whitespace-only input to `""`; readers still tolerate whitespace-only values and display them as `(none)`. Quick Notes remain text-required as an app create/edit rule because they carry no separate reference. The field remains required and is never `null` or omitted. |
+| `type.comment.text` | app | Complete selected text for a text-selection comment. List views may show a bounded preview, but full-detail and queue delivery must preserve the complete value separately from `commentText`. The user's surrounding request supplies the action for a reference-only batch; absent both an instruction body and a surrounding request, an agent must ask rather than invent an action. |
 | `status` | app, MCP | `open` → `handedOff` → `inProgress` → `resolved`. Queue delivery selects `open`, `handedOff` and `inProgress`; the wake path only ever considers `handedOff`. |
 | `wakeRequestedAt` | app only | Apple-epoch timestamp set when the user presses "Send instantly & save". Never cleared. The wake hook treats it as a generation: it wakes when the value is newer than the `wakedAt` entry for that comment, so pressing the button again wakes again. |
 | `isDeleted` | app, MCP | Soft delete. The wake path must exclude deleted comments at selection **and** after its backoff re-read — a deleted comment keeps its `wakeRequestedAt`, and full-UUID MCP lookup returns deleted records. |
 | `sessionID` | app, MCP | The delivery address, for both paths. A session's agent receives that session's comments and no others — not the Inbox's, not another session's. Inbox comments reach an agent only when the user files them to a session or asks for them through `remarc_list_comments`. Earlier builds folded the Inbox into every paired session's queue behind an `includeInboxInSessionContext` preference; that key is now read by nobody, and a value left over from an older build must not resurrect the behaviour. |
 | `origin` (Session) | MCP | Which harness created the session: `manual`, `claudeCode`, or `codex`. The MCP server takes it from the `--harness` flag its manifest passes. **Readers must tolerate unknown values** — harnesses ship on the plugin's schedule, so an older app is routinely the one reading a newer name, and decoding straight into a closed enum fails the whole file rather than the one field. |
+
+Wake reminders intentionally contain only the comment ID, session name and
+comment body. They never copy `type.comment.text`, a page URL, accessibility
+metadata or other selected/page-derived context into the instruction channel.
+For a reference-only comment the wake payload therefore says the body is
+`(none)` and directs the agent to `remarc_get_comment`; the selected reference
+continues to arrive as tool-result data.
 
 ## Unknown-field preservation (required)
 

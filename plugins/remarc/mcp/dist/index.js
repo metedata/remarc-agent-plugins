@@ -21118,6 +21118,10 @@ function formatDate(date3) {
   const min = String(date3.getUTCMinutes()).padStart(2, "0");
   return `${y}-${m}-${d} ${h}:${min} UTC`;
 }
+var NO_COMMENT_BODY = "(none)";
+function displayCommentBody(commentText) {
+  return commentText.trim().length === 0 ? NO_COMMENT_BODY : commentText;
+}
 function getDataDir() {
   return join(homedir(), "Library", "Application Support", "Remarc");
 }
@@ -21774,7 +21778,7 @@ function formatCommentLine(comment, sessions) {
   const date3 = formatDate(comment.createdAt);
   const lines = [];
   lines.push(`[${typeIdentifier(comment.type)}] ${statusTag} ${ref}`);
-  lines.push(`  Comment: ${comment.commentText}`);
+  lines.push(`  Comment: ${displayCommentBody(comment.commentText)}`);
   lines.push(`  Source: ${source} | Session: ${sessionName} | ${date3}`);
   lines.push(`  ID: ${comment.id} (${comment.shortID})`);
   const preview = webContextPreview(comment.webContext);
@@ -21788,6 +21792,68 @@ function formatCommentLine(comment, sessions) {
     }
     if (comment.resolvedAt) {
       lines.push(`  Resolved at: ${formatDate(comment.resolvedAt)}`);
+    }
+  }
+  return lines.join("\n");
+}
+function formatCommentDetail(comment, sessions) {
+  const session = findSession(sessions, comment.sessionID);
+  const sessionName = session ? session.name : "Unknown Session";
+  const ref = typeLabel(comment.type, comment.webContext);
+  const date3 = formatDate(comment.createdAt);
+  const updated = formatDate(comment.updatedAt);
+  const lines = [];
+  lines.push(`Comment: ${comment.id} (${comment.shortID})`);
+  lines.push(`Status: ${comment.status}`);
+  lines.push(`Type: ${typeIdentifier(comment.type)}`);
+  lines.push(`Reference: ${ref}`);
+  if ("comment" in comment.type) {
+    lines.push(`Selected Text: ${comment.type.comment.text}`);
+  }
+  lines.push(`Text: ${displayCommentBody(comment.commentText)}`);
+  lines.push(`Source: ${comment.source}`);
+  if (comment.appBundleID) {
+    lines.push(`App Bundle ID: ${comment.appBundleID}`);
+  }
+  if ("screenshot" in comment.type) {
+    lines.push(`Image Path: ${comment.type.screenshot.imagePath}`);
+    lines.push(`(Use the Read tool to view this image file.)`);
+  }
+  lines.push(`Session: ${sessionName} (${comment.sessionID})`);
+  lines.push(`Created: ${date3}`);
+  lines.push(`Updated: ${updated}`);
+  const wcLines = formatWebContextSection(comment.webContext);
+  if (wcLines.length > 0) {
+    lines.push("");
+    lines.push(...wcLines);
+  }
+  if (comment.regionElements && comment.regionElements.length > 0) {
+    lines.push("");
+    lines.push(`Region Elements (${comment.regionElements.length}):`);
+    comment.regionElements.forEach((el, idx) => {
+      const preview = webContextPreview(el) ?? "(unidentified)";
+      lines.push(`  [${idx + 1}] ${preview}`);
+      const selector = typeof el.selector === "string" && el.selector || typeof el.elementPath === "string" && el.elementPath || null;
+      if (selector) lines.push(`      Selector: ${selector}`);
+      if (el.boundingBox) {
+        const bb = el.boundingBox;
+        if (bb.width != null && bb.height != null && bb.x != null && bb.y != null) {
+          lines.push(
+            `      Bounding Box: ${bb.width}x${bb.height} at (${bb.x}, ${bb.y})`
+          );
+        }
+      }
+    });
+  }
+  if (comment.status === "resolved") {
+    if (comment.resolutionSummary) {
+      lines.push(`Resolution Summary: ${comment.resolutionSummary}`);
+    }
+    if (comment.resolvedBy) {
+      lines.push(`Resolved By: ${comment.resolvedBy}`);
+    }
+    if (comment.resolvedAt) {
+      lines.push(`Resolved At: ${formatDate(comment.resolvedAt)}`);
     }
   }
   return lines.join("\n");
@@ -21882,63 +21948,7 @@ ${formatted.join("\n\n")}${nudge}`);
       if (!comment) {
         return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
       }
-      const session = findSession(state.sessions, comment.sessionID);
-      const sessionName = session ? session.name : "Unknown Session";
-      const ref = typeLabel(comment.type, comment.webContext);
-      const date3 = formatDate(comment.createdAt);
-      const updated = formatDate(comment.updatedAt);
-      const lines = [];
-      lines.push(`Comment: ${comment.id} (${comment.shortID})`);
-      lines.push(`Status: ${comment.status}`);
-      lines.push(`Type: ${typeIdentifier(comment.type)}`);
-      lines.push(`Reference: ${ref}`);
-      lines.push(`Text: ${comment.commentText}`);
-      lines.push(`Source: ${comment.source}`);
-      if (comment.appBundleID) {
-        lines.push(`App Bundle ID: ${comment.appBundleID}`);
-      }
-      if (comment.type && "screenshot" in comment.type) {
-        lines.push(`Image Path: ${comment.type.screenshot.imagePath}`);
-        lines.push(`(Use the Read tool to view this image file.)`);
-      }
-      lines.push(`Session: ${sessionName} (${comment.sessionID})`);
-      lines.push(`Created: ${date3}`);
-      lines.push(`Updated: ${updated}`);
-      const wcLines = formatWebContextSection(comment.webContext);
-      if (wcLines.length > 0) {
-        lines.push("");
-        lines.push(...wcLines);
-      }
-      if (comment.regionElements && comment.regionElements.length > 0) {
-        lines.push("");
-        lines.push(`Region Elements (${comment.regionElements.length}):`);
-        comment.regionElements.forEach((el, idx) => {
-          const preview = webContextPreview(el) ?? "(unidentified)";
-          lines.push(`  [${idx + 1}] ${preview}`);
-          const selector = typeof el.selector === "string" && el.selector || typeof el.elementPath === "string" && el.elementPath || null;
-          if (selector) lines.push(`      Selector: ${selector}`);
-          if (el.boundingBox) {
-            const bb = el.boundingBox;
-            if (bb.width != null && bb.height != null && bb.x != null && bb.y != null) {
-              lines.push(
-                `      Bounding Box: ${bb.width}x${bb.height} at (${bb.x}, ${bb.y})`
-              );
-            }
-          }
-        });
-      }
-      if (comment.status === "resolved") {
-        if (comment.resolutionSummary) {
-          lines.push(`Resolution Summary: ${comment.resolutionSummary}`);
-        }
-        if (comment.resolvedBy) {
-          lines.push(`Resolved By: ${comment.resolvedBy}`);
-        }
-        if (comment.resolvedAt) {
-          lines.push(`Resolved At: ${formatDate(comment.resolvedAt)}`);
-        }
-      }
-      return textResult(lines.join("\n"));
+      return textResult(formatCommentDetail(comment, state.sessions));
     } catch (err) {
       return errorResult(String(err));
     }
