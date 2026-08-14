@@ -13,6 +13,8 @@ handshake and is recorded separately when it changes.
 
 - Recorded the Remarc 1.1.0 release and the completed public Git-marketplace
   acceptance smoke for OMP plugin 0.12.0.
+- Updated the repository's public description, topics, and root release
+  documentation to surface OMP and the current tagged releases.
 
 ## 0.12.0 - 2026-08-15
 

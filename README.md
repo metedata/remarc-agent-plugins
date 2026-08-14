@@ -138,10 +138,12 @@ node scripts/smoke-omp-marketplace.mjs \
   --expected-version 0.12.0
 ```
 
-That local-source run proves packaging before publication. After the candidate
-commit is merged, repeat it with
-`--marketplace metedata/remarc-agent-plugins` to prove the public Git
-marketplace path and cached installed artifact. See
+That local-source run proves packaging before publication. The
+[0.12.0 release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.0)
+also passed the same smoke against
+`--marketplace metedata/remarc-agent-plugins`, proving the public Git
+marketplace path and cached installed artifact. Repeat both paths for future
+releases. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full contract and fixture checks. Do
 not run a marketplace installation smoke test against your normal agent
 profile. Codex clean-install coverage remains a documented gap.
@@ -153,7 +155,10 @@ the portable Agent Plugins manifest, and the OMP catalog entry. The MCP server
 also exposes its own implementation version in the initialize handshake;
 private npm packages are not independently published.
 
-See [CHANGELOG.md](CHANGELOG.md) and [RELEASING.md](RELEASING.md). The repository did not historically publish tags or GitHub Releases; the documented process is the baseline for making future versions traceable.
+Tagged releases and their notes are published on
+[GitHub Releases](https://github.com/metedata/remarc-agent-plugins/releases).
+See [CHANGELOG.md](CHANGELOG.md) for user-visible changes and
+[RELEASING.md](RELEASING.md) for the coordinated app/vendor release process.
 
 ## Contributing and support
 
