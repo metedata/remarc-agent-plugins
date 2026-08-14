@@ -1,17 +1,117 @@
-# Remarc plugins for Claude Code
+# Remarc agent plugins
 
-Two plugins:
+Official agent-side integrations for [Remarc](https://remarc.app), the local-first macOS app for contextual comments.
 
-- **`remarc`** (required) - MCP server + skill for managing Remarc comments.
-- **`remarc-hooks`** (optional, experimental) - session-lifecycle hooks that auto-link Claude Code sessions to Remarc sessions and inject open comments.
+This repository is the source of truth for Remarc's MCP server, agent skill, and optional lifecycle integrations. The Remarc app vendors the built MCP server from this repository; supported agent clients install the same code through their plugin marketplace.
+
+The repository is public under the [MIT License](LICENSE). Remarc itself is also [open source](https://github.com/metedata/Remarc).
+
+## Support status
+
+| Agent | MCP server and skill | Lifecycle integration | Instant delivery |
+| --- | --- | --- | --- |
+| Claude Code | Supported | Optional `remarc-hooks` plugin, experimental | Supported when hooks are paired and the user enables it |
+| Codex | Supported | Not part of the supported app install flow | On demand when the agent calls the MCP tools |
+| OMP | [Proposed](docs/omp-integration-proposal.md) | Proposed external extension | Proposed |
+
+The current verified baseline is recorded in [Compatibility](docs/compatibility.md). A row marked proposed is not a supported installation promise.
+
+## Requirements
+
+- macOS with the latest [Remarc release](https://github.com/metedata/Remarc/releases/latest) installed and launched at least once.
+- Node.js available as `node`. The committed bundles target Node 18; CI currently builds and tests with Node 22.
+- A supported agent CLI for marketplace installation.
+
+Remarc data and screenshot paths live under `~/Library/Application Support/Remarc/`. A remote or containerized agent needs access to those local paths to inspect screenshot comments.
 
 ## Install
 
+### Claude Code
+
+You can install from Remarc's Settings window, or run:
+
 ```sh
-/plugin marketplace add metedata/remarc-agent-plugins
-/plugin install remarc@remarc
-# optional:
-/plugin install remarc-hooks@remarc
+claude plugin marketplace add metedata/remarc-agent-plugins
+claude plugin install remarc@remarc
 ```
 
-See [Remarc](https://remarc.app) for the macOS app.
+The optional Claude Code lifecycle integration is an explicit opt-in:
+
+```sh
+claude plugin install remarc-hooks@remarc
+```
+
+After changing plugins in an active Claude Code session, run `/reload-plugins`.
+
+See the [Claude Code guide](https://docs.remarc.app/agents/claude-code/) and [`remarc-hooks` documentation](plugins/remarc-hooks/README.md) for delivery behavior and removal instructions.
+
+### Codex
+
+You can install from Remarc's Settings window, or run:
+
+```sh
+codex plugin marketplace add metedata/remarc-agent-plugins
+codex plugin marketplace upgrade remarc
+codex plugin add remarc@remarc
+```
+
+See the [Codex guide](https://docs.remarc.app/agents/codex/) for repair and removal instructions.
+
+### Verify the connection
+
+Ask the agent to call `remarc_list_sessions`. A successful response listing the active Remarc sessions proves that the MCP server can read the app's current data.
+
+## What is included
+
+- **`remarc`** - the required MCP server and workflow skill. It lists sessions and comments, fetches captured context, updates statuses with compare-and-set support, renames sessions, and creates linked sessions for currently supported harnesses.
+- **`remarc-hooks`** - an optional, experimental lifecycle plugin. Claude Code can pair a conversation with one Remarc session, inject outstanding comments, and receive an explicit instant-delivery request.
+- **Shared contracts** - the schema, locking, marker, and forward-compatibility rules used across the app and plugins.
+
+See [Architecture](docs/architecture.md) for the ownership boundary and runtime data flow. The MCP tool behavior is documented in the [Remarc MCP tools reference](https://docs.remarc.app/agents/mcp-tools-reference/).
+
+## Data and security
+
+The MCP server and hooks read and update Remarc's local data file. They do not send Remarc data to a Remarc-operated service and contain no telemetry. Tool results and injected context are still processed by the agent provider you chose, under that provider's policies.
+
+Comments may contain text captured from web pages, applications, screenshots, or transcriptions. The integrations treat that material as untrusted source content, preserve unknown data fields, and use bounded, delimited payloads for automatic delivery.
+
+Plugins execute with your user account's permissions. Review the source before installation and report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `.claude-plugin/marketplace.json` | Marketplace catalog currently consumed by Claude Code and Codex |
+| `plugins/remarc/` | MCP server, manifests, and the shared Remarc skill |
+| `plugins/remarc-hooks/` | Optional lifecycle and instant-delivery integration |
+| `plugins/shared/` | Data parser, marker protocol, schema fixture, locks, and cross-plugin tests |
+| `docs/` | Architecture, compatibility, and integration proposals |
+
+Built JavaScript under `dist/` is committed because plugin managers execute the packaged artifact without building it locally. CI rebuilds the bundles and fails if committed output has drifted from source.
+
+## Development
+
+The shortest local verification loop is:
+
+```sh
+(cd plugins/remarc/mcp && npm ci && npm test && npm run build)
+(cd plugins/remarc-hooks/cli && npm ci && npm test && npm run build)
+git diff --exit-code -- plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist
+claude plugin validate .
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contract and fixture checks. Do not run a marketplace installation smoke test against your normal agent profile. CI currently performs the Claude Code smoke test in an isolated runner; Codex clean-install coverage is a documented gap.
+
+## Releases
+
+The public distribution version is shared by the four plugin manifests. The MCP server also exposes its own implementation version in the initialize handshake; private npm packages are not independently published.
+
+See [CHANGELOG.md](CHANGELOG.md) and [RELEASING.md](RELEASING.md). The repository did not historically publish tags or GitHub Releases; the documented process is the baseline for making future versions traceable.
+
+## Contributing and support
+
+Focused bug reports and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before changing the shared data or wake contracts.
+
+- End-user documentation: [docs.remarc.app](https://docs.remarc.app)
+- Bug reports: [GitHub Issues](https://github.com/metedata/remarc-agent-plugins/issues)
+- Security reports: [SECURITY.md](SECURITY.md)

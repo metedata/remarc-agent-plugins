@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible problem with a Remarc agent integration
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Remarc. Do not include private comments, screenshots, transcripts, credentials, or unsanitized local data. Report security issues privately according to SECURITY.md.
+  - type: dropdown
+    id: integration
+    attributes:
+      label: Integration
+      options:
+        - Claude Code remarc plugin
+        - Claude Code remarc-hooks plugin
+        - Codex remarc plugin
+        - Shared MCP or data contract
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Include the Remarc version, plugin version, agent CLI version, Node.js version, and macOS version.
+      placeholder: "Remarc 1.0.1; plugin 0.10.0; Codex 0.146.1; Node 22; macOS 15"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use a fresh test session or sanitized fixture when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste only the smallest relevant, privacy-scrubbed log or plugin error.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials and private Remarc content from this report.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
