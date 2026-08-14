@@ -21,6 +21,7 @@ import { notifyRemarcReload } from "./notify.js";
 import { writeMarker } from "./marker.js";
 import { currentHarness } from "./harness.js";
 import { randomUUID } from "node:crypto";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,7 +104,8 @@ export function formatCommentLine(comment: Comment, sessions: Session[]): string
 /** Full-detail rendering used by remarc_get_comment. */
 export function formatCommentDetail(
   comment: Comment,
-  sessions: Session[]
+  sessions: Session[],
+  dataFilePath = getDataFilePath()
 ): string {
   const session = findSession(sessions, comment.sessionID);
   const sessionName = session ? session.name : "Unknown Session";
@@ -127,7 +129,11 @@ export function formatCommentDetail(
     lines.push(`App Bundle ID: ${comment.appBundleID}`);
   }
   if ("screenshot" in comment.type) {
-    lines.push(`Image Path: ${comment.type.screenshot.imagePath}`);
+    const storedPath = comment.type.screenshot.imagePath;
+    const imagePath = isAbsolute(storedPath)
+      ? storedPath
+      : resolve(dirname(dataFilePath), storedPath);
+    lines.push(`Image Path: ${imagePath}`);
     lines.push(`(Use the Read tool to view this image file.)`);
   }
   lines.push(`Session: ${sessionName} (${comment.sessionID})`);

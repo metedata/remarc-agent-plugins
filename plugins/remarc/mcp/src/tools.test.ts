@@ -40,6 +40,14 @@ function selectedComment(selectedText: string, commentText = ""): Comment {
   };
 }
 
+function screenshotComment(imagePath: string): Comment {
+  return {
+    ...selectedComment("", ""),
+    type: { screenshot: { imagePath } },
+    source: "Screenshot",
+  };
+}
+
 describe("reference-only comment formatting", () => {
   it("keeps list references bounded and labels an absent body", () => {
     const selectedText = `first line\n${"x".repeat(100)} END-OF-SELECTION`;
@@ -71,5 +79,29 @@ describe("reference-only comment formatting", () => {
     );
 
     expect(rendered).toContain("Text: Please revise this");
+  });
+
+  it("resolves a blank screenshot's relative image path beside the data file", () => {
+    const rendered = formatCommentDetail(
+      screenshotComment("images/capture.png"),
+      [session],
+      "/Users/test/Library/Application Support/Remarc/comments.json"
+    );
+
+    expect(rendered).toContain("Text: (none)");
+    expect(rendered).toContain(
+      "Image Path: /Users/test/Library/Application Support/Remarc/images/capture.png"
+    );
+  });
+
+  it("preserves a blank screenshot's legacy absolute image path", () => {
+    const rendered = formatCommentDetail(
+      screenshotComment("/tmp/legacy-capture.png"),
+      [session],
+      "/Users/test/Library/Application Support/Remarc/comments.json"
+    );
+
+    expect(rendered).toContain("Text: (none)");
+    expect(rendered).toContain("Image Path: /tmp/legacy-capture.png");
   });
 });
