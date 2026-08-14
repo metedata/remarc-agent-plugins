@@ -697,34 +697,58 @@ function formatComments(comments, state, maxChars) {
   lines.push("");
   let used = lines.join("\n").length;
   for (const c of comments) {
-    const entry = [];
     const type = typeIdentifier(c.type);
     const hasBody = c.commentText.trim().length > 0;
-    entry.push(`### ${c.shortID} (id: ${c.id})`);
-    entry.push(`Type: ${type}`);
-    const body = hasBody ? wrapUntrusted(c.commentText) : NO_COMMENT_BODY;
-    entry.push(`Comment text: ${body}`);
-    if (c.type && "comment" in c.type) {
-      entry.push(`Selected text: ${wrapUntrusted(c.type.comment.text)}`);
-    }
-    if (!hasBody && ["comment", "screenshot", "webElement"].includes(type)) {
-      entry.push(
-        `Full context: call remarc_get_comment with id "${c.id}" before acting.`
-      );
-    }
-    if (c.source) entry.push(`Source: ${wrapUntrusted(c.source)}`);
     const session = sessionsById.get(c.sessionID.toUpperCase());
-    if (session) entry.push(`Session: ${wrapUntrusted(session.name)}`);
-    entry.push(`Status: ${c.status}`);
-    entry.push("");
-    let block = entry.join("\n");
-    if (used + block.length > maxChars) {
+    const isReferenceOnly = !hasBody && ["comment", "screenshot", "webElement"].includes(type);
+    const buildEntry = (valueLimit, forceFullContext = false) => {
+      const bounded = (value) => valueLimit === void 0 ? value : truncateUntrusted(value, valueLimit);
+      const entry = [];
+      entry.push(`### ${c.shortID} (id: ${c.id})`);
+      entry.push(`Type: ${type}`);
+      const body = hasBody ? wrapUntrusted(bounded(c.commentText)) : NO_COMMENT_BODY;
+      entry.push(`Comment text: ${body}`);
+      if (c.type && "comment" in c.type) {
+        entry.push(`Selected text: ${wrapUntrusted(bounded(c.type.comment.text))}`);
+      }
+      if (isReferenceOnly || forceFullContext) {
+        entry.push(
+          `Full context: call remarc_get_comment with id "${c.id}" before acting.`
+        );
+      }
+      if (c.source) entry.push(`Source: ${wrapUntrusted(bounded(c.source))}`);
+      if (session) entry.push(`Session: ${wrapUntrusted(bounded(session.name))}`);
+      entry.push(`Status: ${c.status}`);
+      entry.push("");
+      return entry.join("\n");
+    };
+    let block = buildEntry();
+    if (used + 1 + block.length > maxChars) {
       if (includedIds.length > 0) break;
-      const room = Math.max(200, maxChars - used - 200);
-      block = block.slice(0, room) + "\n[truncated - fetch the full comment with remarc_get_comment]\n";
+      const available = Math.max(0, maxChars - used - 1);
+      const values = [
+        ...hasBody ? [c.commentText] : [],
+        ...c.type && "comment" in c.type ? [c.type.comment.text] : [],
+        ...c.source ? [c.source] : [],
+        ...session ? [session.name] : []
+      ];
+      let low = 0;
+      let high = Math.max(0, ...values.map((value) => value.length));
+      let best = buildEntry(0, true);
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const candidate = buildEntry(mid, true);
+        if (candidate.length <= available) {
+          best = candidate;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      block = best;
     }
     lines.push(block);
-    used += block.length;
+    used += 1 + block.length;
     includedIds.push(c.id);
     if (used >= maxChars) break;
   }
@@ -736,6 +760,12 @@ function wrapUntrusted(text) {
   return `<<<REMARC-DATA-${token}>>>
 ${text}
 <<<END-${token}>>>`;
+}
+function truncateUntrusted(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  const marker = "\n[\u2026 truncated; fetch full context \u2026]";
+  if (maxChars <= marker.length) return "\u2026";
+  return text.slice(0, maxChars - marker.length) + marker;
 }
 async function windDown(input) {
   const behavior = await readStringDefault("claudeCodeSessionEndBehavior", "keep");

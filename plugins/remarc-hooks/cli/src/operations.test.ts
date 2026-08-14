@@ -69,6 +69,37 @@ describe("formatComments reference-only contract", () => {
     expect(selected?.[2]).toBe(selectedText);
   });
 
+  it("keeps oversized reference-only context bounded, balanced, and retrievable", () => {
+    const selectedText = `${"x".repeat(50_000)} END-OF-SELECTION`;
+    const comment = selectedComment(selectedText, "");
+
+    const rendered = formatComments([comment], state(comment), 9000);
+
+    expect(rendered.includedIds).toEqual([comment.id]);
+    expect(rendered.text.length).toBeLessThanOrEqual(9000);
+    const fetchInstruction =
+      `Full context: call remarc_get_comment with id "${comment.id}" before acting.`;
+    expect(rendered.text).toContain(fetchInstruction);
+    expect(rendered.text).toContain("[… truncated; fetch full context …]");
+    expect(rendered.text).not.toContain("END-OF-SELECTION");
+
+    const selected = rendered.text.match(
+      /Selected text: <<<REMARC-DATA-([0-9a-f]{8})>>>\n([\s\S]*?)\n<<<END-\1>>>/
+    );
+    expect(selected).not.toBeNull();
+    expect(rendered.text.indexOf(fetchInstruction)).toBeGreaterThan(
+      (selected?.index ?? 0) + (selected?.[0].length ?? 0)
+    );
+
+    const openTokens = [
+      ...rendered.text.matchAll(/<<<REMARC-DATA-([0-9a-f]{8})>>>/g),
+    ].map((match) => match[1]);
+    expect(openTokens.length).toBeGreaterThan(0);
+    for (const token of openTokens) {
+      expect(rendered.text.match(new RegExp(`<<<END-${token}>>>`, "g"))).toHaveLength(1);
+    }
+  });
+
   it("identifies a blank screenshot and directs the agent to its full context", () => {
     const comment: Comment = {
       ...selectedComment(""),

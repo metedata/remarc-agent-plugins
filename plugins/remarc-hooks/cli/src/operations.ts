@@ -228,40 +228,69 @@ export function formatComments(
   let used = lines.join("\n").length;
 
   for (const c of comments) {
-    const entry: string[] = [];
     const type = typeIdentifier(c.type);
     const hasBody = c.commentText.trim().length > 0;
-    entry.push(`### ${c.shortID} (id: ${c.id})`);
-    entry.push(`Type: ${type}`);
-    const body = hasBody ? wrapUntrusted(c.commentText) : NO_COMMENT_BODY;
-    entry.push(`Comment text: ${body}`);
-    if (c.type && "comment" in c.type) {
-      entry.push(`Selected text: ${wrapUntrusted(c.type.comment.text)}`);
-    }
-    if (!hasBody && ["comment", "screenshot", "webElement"].includes(type)) {
-      entry.push(
-        `Full context: call remarc_get_comment with id "${c.id}" before acting.`
-      );
-    }
-    if (c.source) entry.push(`Source: ${wrapUntrusted(c.source)}`);
     const session = sessionsById.get(c.sessionID.toUpperCase());
-    if (session) entry.push(`Session: ${wrapUntrusted(session.name)}`);
-    entry.push(`Status: ${c.status}`);
-    entry.push("");
+    const isReferenceOnly =
+      !hasBody && ["comment", "screenshot", "webElement"].includes(type);
 
-    let block = entry.join("\n");
-    if (used + block.length > maxChars) {
+    const buildEntry = (valueLimit?: number, forceFullContext = false): string => {
+      const bounded = (value: string): string =>
+        valueLimit === undefined ? value : truncateUntrusted(value, valueLimit);
+      const entry: string[] = [];
+      entry.push(`### ${c.shortID} (id: ${c.id})`);
+      entry.push(`Type: ${type}`);
+      const body = hasBody ? wrapUntrusted(bounded(c.commentText)) : NO_COMMENT_BODY;
+      entry.push(`Comment text: ${body}`);
+      if (c.type && "comment" in c.type) {
+        entry.push(`Selected text: ${wrapUntrusted(bounded(c.type.comment.text))}`);
+      }
+      if (isReferenceOnly || forceFullContext) {
+        entry.push(
+          `Full context: call remarc_get_comment with id "${c.id}" before acting.`
+        );
+      }
+      if (c.source) entry.push(`Source: ${wrapUntrusted(bounded(c.source))}`);
+      if (session) entry.push(`Session: ${wrapUntrusted(bounded(session.name))}`);
+      entry.push(`Status: ${c.status}`);
+      entry.push("");
+      return entry.join("\n");
+    };
+
+    let block = buildEntry();
+    if (used + 1 + block.length > maxChars) {
       if (includedIds.length > 0) break;
       // Nothing fits yet and this is the newest comment: truncate rather than
       // emit nothing. Selection is newest-first, so skipping it would block
-      // this comment and every older one on every future prompt.
-      const room = Math.max(200, maxChars - used - 200);
-      block =
-        block.slice(0, room) +
-        "\n[truncated - fetch the full comment with remarc_get_comment]\n";
+      // this comment and every older one on every future prompt. Truncate the
+      // untrusted values before wrapping them: slicing the rendered block can
+      // remove a closing sentinel and turn the trusted retrieval instruction
+      // into source material.
+      const available = Math.max(0, maxChars - used - 1);
+      const values = [
+        ...(hasBody ? [c.commentText] : []),
+        ...(c.type && "comment" in c.type ? [c.type.comment.text] : []),
+        ...(c.source ? [c.source] : []),
+        ...(session ? [session.name] : []),
+      ];
+      let low = 0;
+      let high = Math.max(0, ...values.map((value) => value.length));
+      let best = buildEntry(0, true);
+
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const candidate = buildEntry(mid, true);
+        if (candidate.length <= available) {
+          best = candidate;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      block = best;
     }
     lines.push(block);
-    used += block.length;
+    used += 1 + block.length;
     includedIds.push(c.id);
     if (used >= maxChars) break;
   }
@@ -273,6 +302,13 @@ export function formatComments(
 function wrapUntrusted(text: string): string {
   const token = randomBytes(4).toString("hex");
   return `<<<REMARC-DATA-${token}>>>\n${text}\n<<<END-${token}>>>`;
+}
+
+function truncateUntrusted(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const marker = "\n[… truncated; fetch full context …]";
+  if (maxChars <= marker.length) return "…";
+  return text.slice(0, maxChars - marker.length) + marker;
 }
 
 // --- windDown ---
