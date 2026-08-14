@@ -7,7 +7,9 @@ independent of the optional instant-delivery extension described in the
 
 ## Requirements
 
-- macOS with Remarc installed and launched at least once;
+- macOS with Remarc installed and launched at least once (1.0.1 supports the
+  core MCP path; 1.1.0 or later is required for the OMP badge and instant
+  delivery);
 - OMP 17.3.4, the currently verified baseline;
 - Node.js available as `node` in the environment that launches OMP;
 - local filesystem access to `~/Library/Application Support/Remarc/`.
@@ -62,7 +64,8 @@ sessions.
 
 ## Use Remarc from OMP
 
-1. Create or select a session in the Remarc app.
+1. Ask OMP to create a correctly labelled Remarc session, or select an existing
+   session in the app.
 2. Ask OMP to call `remarc_list_sessions` and identify that session.
 3. List or fetch its comments.
 4. When addressing handed-off work, claim it with
@@ -73,29 +76,40 @@ The shared skill describes read-only, addressing, and status-only workflows.
 The MCP server preserves unknown document, session, comment, and web-context
 fields during supported updates.
 
-## Current limitation: session creation
+## Session creation and pairing
 
-OMP cannot create a correctly labelled linked Remarc session yet. The OMP MCP
-process rejects `remarc_create_session` before reading or writing the Remarc
-document, even if a caller attempts to pass `harness: "claudeCode"` or
-`harness: "codex"`.
+The OMP-owned MCP process can create sessions with native `origin: "omp"`.
+Its trusted launch identity wins over any model-controlled Claude Code or Codex
+override. OMP leaves the legacy `claudeCodeSessionId` field empty and does not
+write an ownerless marker.
 
-This restriction avoids writing false session provenance while older Remarc
-versions and the shared schema do not yet support `origin: "omp"`. Reading,
-renaming, handing off, claiming, reopening, and resolving existing sessions and
-comments remain available.
+Session creation and instant pairing are intentionally separate. Remarc 1.1.0
+or later is required for the app to validate the OMP lease and show Instant
+delivery. Install the
+optional `remarc-wake` extension, make the intended Remarc session active, and
+run `/remarc-pair` in the OMP conversation that should receive comments. This
+explicitly publishes a token-owned, heartbeat-renewed lease. `/remarc-unpair`
+removes only the current owner's lease.
 
-Instant delivery and live OMP pairing are not part of the core plugin yet.
-Until the optional wake extension and generic app reachability changes ship,
-OMP reads new comments when asked rather than waking an idle session.
+```sh
+omp plugin install --scope user remarc-wake@remarc
+```
+
+Restart OMP after installing or upgrading an extension module. Enable **Allow
+comments to wake paired agent sessions** in Remarc. Core-only OMP continues to
+read comments on demand without a background wake connection.
 
 ## Update, disable, or remove
 
 ```sh
 omp plugin marketplace update remarc
 omp plugin upgrade --scope user remarc@remarc
+omp plugin upgrade --scope user remarc-wake@remarc
 omp plugin disable --scope user remarc@remarc
+omp plugin disable --scope user remarc-wake@remarc
 omp plugin enable --scope user remarc@remarc
+omp plugin enable --scope user remarc-wake@remarc
+omp plugin uninstall --scope user remarc-wake@remarc
 omp plugin uninstall --scope user remarc@remarc
 omp plugin marketplace remove remarc
 ```
@@ -109,13 +123,13 @@ sessions, comments, or screenshots.
 The pre-publication smoke installs from a candidate checkout into a completely
 isolated OMP profile and verifies user/project scopes, project shadowing,
 enable/disable, uninstall/reinstall, skill discovery, TUI MCP discovery, the
-cached package shape, and the installed create-session guard:
+cached package shape, native OMP session creation, and marker isolation:
 
 ```sh
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.11.0
+  --expected-version 0.12.0
 ```
 
 The script requires the exact `omp/17.3.4` version output and removes only the

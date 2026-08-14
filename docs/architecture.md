@@ -25,7 +25,7 @@ The app and plugins run as the same macOS user. They coordinate through files un
 | Capture UI, sessions, comments, screenshots, preferences | Remarc app |
 | `comments.json` schema and cross-language compatibility | App and plugin repositories jointly |
 | MCP implementation and committed JavaScript bundle | This repository |
-| Agent skills, manifests, hooks, and future extensions | This repository |
+| Agent skills, manifests, hooks, and extensions | This repository |
 | Plugin install, enable, update, and removal state | Each agent runtime |
 | Vendored MCP artifact in the signed app | Remarc app, copied from a pinned commit here |
 
@@ -90,7 +90,18 @@ cooperative agent claims work with:
 remarc_set_status(id, "inProgress", expected_status: "handedOff")
 ```
 
-The compare-and-set occurs inside the document transaction. Only one cooperative caller can successfully perform that transition from the expected state; this does not make delivery or agent execution exactly-once. A future implementation may strengthen wake attempts with a durable outbox written before enqueue and cleared only after a durable work claim, accepting possible duplicates around a crash.
+The compare-and-set occurs inside the document transaction. Only one
+cooperative caller can successfully perform that transition from the expected
+state; this does not make delivery or agent execution exactly-once.
+
+OMP's optional `remarc-wake` extension has a stronger retry boundary. It writes
+the exact comment generation into a durable `pendingWake` outbox before asking
+OMP to queue next-turn context. OMP's enqueue API returns no delivery receipt,
+so the entry remains pending until Remarc durably shows that the comment left
+`handedOff`. Resuming the paired OMP session reoffers pending generations. This
+prevents the enqueue boundary from silently consuming a generation, but it can
+produce duplicate delivery attempts around crashes and does not make model
+execution exactly-once.
 
 ## Trust and privacy model
 
@@ -115,16 +126,21 @@ See [RELEASING.md](../RELEASING.md).
 
 ## Current compatibility constraints
 
-- The MCP runtime recognizes OMP as a caller so it can enforce an OMP-specific
-  create-session guard. Persisted session-origin and create-session input
-  declarations still support only `claudeCode` and `codex`.
-- Runtime decoders preserve unknown session-origin strings, but the current JSON Schema lists only `manual`, `claudeCode`, and `codex`. A new harness must reconcile that schema before it writes a new origin.
-- The legacy field name `claudeCodeSessionId` stores the linked agent-session identifier for both supported harnesses.
+- The MCP runtime recognizes OMP from its trusted Agent Plugins launch identity
+  and persists native `origin: "omp"`; model-controlled Claude/Codex overrides
+  cannot relabel an OMP-owned server.
+- Runtime decoders preserve unknown session-origin strings, and the shared JSON
+  Schema explicitly lists `manual`, `claudeCode`, `codex`, and `omp`.
+- The legacy field name `claudeCodeSessionId` stores the linked agent-session
+  identifier for Claude Code and Codex. OMP leaves it empty because the wake
+  extension owns a separate token-leased pairing.
 - MCP resolutions use the trusted launch identity for `resolvedBy`: `claude`,
   `codex`, or `omp`. Claude lifecycle-hook writes retain the legacy `claude`
   attribution.
-- The current marker serializer keeps known fields only. A new harness-specific
-  lease must add unknown-field preservation before it extends the shared marker.
-- The marker contract has no explicit protocol version. Breaking changes require coordinated app and plugin releases.
+- The shared marker serializer preserves unknown fields and supports a
+  versioned OMP lease with owner token, PID, heartbeat, and durable pending-wake
+  outbox state.
+- OMP lease protocol version 1 is consumed by both TypeScript and Swift.
+  Breaking changes require coordinated app and plugin releases.
 
 These constraints are gates in the [OMP integration proposal](omp-integration-proposal.md), not reasons to mislabel an OMP session as Claude Code.

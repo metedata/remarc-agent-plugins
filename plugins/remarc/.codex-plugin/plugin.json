@@ -1,6 +1,6 @@
 {
   "name": "remarc",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Read, address, and resolve Remarc comments from Codex.",
   "author": {
     "name": "Mete Polat",

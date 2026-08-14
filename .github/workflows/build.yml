@@ -17,6 +17,10 @@ jobs:
         working-directory: plugins/remarc/mcp
         run: npm ci && npm audit --audit-level=high && npm test && npm run build
 
+      - name: build + test OMP wake extension
+        working-directory: plugins/remarc-wake
+        run: npm ci && npm audit --omit=dev --audit-level=high && npm run typecheck && npm test && npm run build
+
       - name: install pinned OMP
         shell: bash
         run: |
@@ -61,7 +65,11 @@ jobs:
 
       - name: verify committed dist/ matches build output
         run: |
-          if ! git diff --exit-code plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist; then
+          if ! git ls-files --error-unmatch plugins/remarc-wake/dist/index.js >/dev/null; then
+            echo "ERROR: plugins/remarc-wake/dist/index.js is not committed."
+            exit 1
+          fi
+          if ! git diff --exit-code plugins/remarc/mcp/dist plugins/remarc-hooks/cli/dist plugins/remarc-wake/dist; then
             echo "ERROR: dist/ is out of date. Run 'npm run build' in each bundle and commit."
             exit 1
           fi

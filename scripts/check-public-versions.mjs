@@ -26,9 +26,21 @@ const ompRemarc = ompCatalog.plugins?.find((plugin) => plugin.name === "remarc")
 if (!ompRemarc) {
   throw new Error(".omp-plugin/marketplace.json has no remarc entry");
 }
+const ompWake = ompCatalog.plugins?.find((plugin) => plugin.name === "remarc-wake");
+if (!ompWake) {
+  throw new Error(".omp-plugin/marketplace.json has no remarc-wake entry");
+}
 versions.push({
   path: ".omp-plugin/marketplace.json#remarc",
   version: ompRemarc.version,
+});
+versions.push({
+  path: ".omp-plugin/marketplace.json#remarc-wake",
+  version: ompWake.version,
+});
+versions.push({
+  path: "plugins/remarc-wake/package.json",
+  version: readJson("plugins/remarc-wake/package.json").version,
 });
 
 for (const { path, version } of versions) {
