@@ -9,6 +9,11 @@ handshake and is recorded separately when it changes.
 
 ## Unreleased
 
+### Documentation
+
+- Recorded the Remarc 1.1.0 release and the completed public Git-marketplace
+  acceptance smoke for OMP plugin 0.12.0.
+
 ## 0.12.0 - 2026-08-15
 
 ### Added
