@@ -278,12 +278,29 @@ Release the wake extension only with the small app changes that make it usable a
 - recognize the versioned OMP token + live PID + 60-second heartbeat predicate
   above, with no PID-only or heartbeat-only fallback;
 - require a live marker paired to the selected Remarc session before showing the CTA;
-- optionally add the OMP session origin and badge when OMP-created sessions are enabled;
+- add the OMP session origin and official badge when OMP-created sessions are enabled;
 - link to this repository's OMP setup documentation.
 
 Do not add the prototype's `OMPIntegrationDetector` or scan `~/.omp/agent` and named profiles. OMP supports user/project scopes and plugin-managed roots; installed files are not proof of a live pairing. OMP owns installation status, while the marker proves runtime reachability.
 
 The app patch should stay independent of OMP package layout: generic marker fields in, generic paired-agent UI out.
+
+When coordinated origin support lands, use OMP's official full-color favicon for
+the session badge. The live [`omp.sh/favicon.svg`](https://omp.sh/favicon.svg)
+matches [`packages/collab-web/public/favicon.svg`](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/collab-web/public/favicon.svg)
+at the reviewed commit byte for byte (SHA-256
+`9419975a0c24961341221c4cec18703db26a989fa037768f92cda74e3769fe05`).
+Vendor that SVG as `OMPLogo.imageset` with
+`preserves-vector-representation: true`, `template-rendering-intent: original`,
+and `.renderingMode(.original)`. Record its upstream path, commit, hash, and MIT
+notice in both Remarc copies of `THIRD-PARTY-NOTICES.md`. Preserve the dark
+rounded-square background and pink-purple-cyan gradient; unlike the current
+template-rendered Claude Code and Codex marks, it must render in its original
+colors.
+
+That badge reports session provenance (`Created by OMP`), matching
+`SessionOriginBadge`; it is not evidence of a currently live pairing. Any live
+OMP indicator must remain marker-driven and visually distinct.
 
 ## Pull-request sequence
 
@@ -402,3 +419,5 @@ Then perform the clean Debug build and mandatory relaunch required by the Remarc
 - [`nextTurn` queue drain](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/coding-agent/src/session/agent-session.ts#L6134-L6137)
 - [MCP discovery, namespacing, reload, and testing](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/docs/mcp-config.md)
 - [Plugin manager installation and scopes](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/docs/plugin-manager-installer-plumbing.md)
+- [Official OMP session-badge SVG](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/packages/collab-web/public/favicon.svg)
+- [OMP MIT license](https://github.com/can1357/oh-my-pi/blob/ffd53ff92a6f575d499730475a73460dd7cc2eea/LICENSE)
