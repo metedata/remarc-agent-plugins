@@ -11,7 +11,7 @@
  * only, since a custom `CODEX_HOME` means the plugin root need not say "codex"
  * anywhere.
  */
-export type Harness = "claudeCode" | "codex";
+export type Harness = "claudeCode" | "codex" | "omp";
 
 let declared: Harness | null = null;
 
@@ -19,7 +19,9 @@ let declared: Harness | null = null;
 export function setHarnessFromArgv(argv: string[]): void {
   const i = argv.indexOf("--harness");
   const value = i >= 0 ? argv[i + 1] : undefined;
-  declared = value === "codex" || value === "claudeCode" ? value : null;
+  declared = value === "codex" || value === "claudeCode" || value === "omp"
+    ? value
+    : null;
 }
 
 export function currentHarness(env: NodeJS.ProcessEnv = process.env): Harness {

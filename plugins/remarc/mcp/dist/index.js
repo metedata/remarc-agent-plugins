@@ -6,7 +6,11 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -3640,7 +3644,12 @@ var require_fast_uri = __commonJS({
     }
     function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
+      const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
+      const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
+      if (baseMalformed || relativeMalformed) {
+        throw new Error(baseParsed.error || relativeParsed.error || "URI is malformed.");
+      }
+      const resolved = resolveComponent(baseParsed, relativeParsed, schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
@@ -3765,6 +3774,8 @@ var require_fast_uri = __commonJS({
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
+    var AUTHORITY_INTRODUCER_REGION = /^(?:[^#/:?]+:)?([/\\\t\n\r]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -3792,6 +3803,25 @@ var require_fast_uri = __commonJS({
           uri = options.scheme + ":" + uri;
         } else {
           uri = "//" + uri;
+        }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
+      }
+      const introducerMatch = uri.match(AUTHORITY_INTRODUCER_REGION);
+      if (introducerMatch !== null) {
+        const region = introducerMatch[1];
+        const normalizedRegion = region.replace(/[\t\n\r]/g, "");
+        if (normalizedRegion.length >= 2) {
+          if (normalizedRegion.slice(0, 2) !== "//") {
+            parsed.error = parsed.error || "URI authority must not contain a literal backslash.";
+            malformedAuthorityOrPort = true;
+          } else if (region.length !== normalizedRegion.length) {
+            parsed.error = parsed.error || "URI authority introducer must not contain whitespace.";
+            malformedAuthorityOrPort = true;
+          }
         }
       }
       const matches = uri.match(URI_PARSE);
@@ -3837,7 +3867,7 @@ var require_fast_uri = __commonJS({
         if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
           if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
             try {
-              parsed.host = URL.domainToASCII(parsed.host.toLowerCase());
+              parsed.host = new URL("http://" + parsed.host).hostname;
             } catch (e) {
               parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
             }
@@ -21394,12 +21424,12 @@ async function withDocument(mutate) {
     await releaseLock(lockPath);
   }
 }
-function applyStatusUpdate(comment, status, summary, now) {
+function applyStatusUpdate(comment, status, summary, now, resolvedBy = "claude") {
   comment.status = status;
   comment.updatedAt = now;
   if (status === "resolved") {
     comment.resolutionSummary = summary;
-    comment.resolvedBy = "claude";
+    comment.resolvedBy = resolvedBy;
     comment.resolvedAt = now;
   } else {
     comment.resolutionSummary = null;
@@ -21725,7 +21755,7 @@ var declared = null;
 function setHarnessFromArgv(argv) {
   const i = argv.indexOf("--harness");
   const value = i >= 0 ? argv[i + 1] : void 0;
-  declared = value === "codex" || value === "claudeCode" ? value : null;
+  declared = value === "codex" || value === "claudeCode" || value === "omp" ? value : null;
 }
 function currentHarness(env = process.env) {
   if (declared) return declared;
@@ -21741,6 +21771,10 @@ function currentHarness(env = process.env) {
 import { randomUUID } from "node:crypto";
 function textResult(text) {
   return { content: [{ type: "text", text }] };
+}
+function currentResolver() {
+  const harness = currentHarness();
+  return harness === "claudeCode" ? "claude" : harness;
 }
 function errorResult(text) {
   return { content: [{ type: "text", text }], isError: true };
@@ -21969,7 +22003,7 @@ ${formatted.join("\n\n")}${nudge}`);
         if (comment.status === status) {
           return { kind: "noop", shortID: comment.shortID };
         }
-        applyStatusUpdate(comment, status, summary, /* @__PURE__ */ new Date());
+        applyStatusUpdate(comment, status, summary, /* @__PURE__ */ new Date(), currentResolver());
         return { kind: "ok", shortID: comment.shortID };
       });
       if (outcome.kind === "missing") {
@@ -22066,7 +22100,7 @@ Summary: ${summary}`);
         const results = [];
         for (const { comment, summary: commentSummary } of targets) {
           if (comment.status === status) continue;
-          applyStatusUpdate(comment, status, commentSummary, now);
+          applyStatusUpdate(comment, status, commentSummary, now, currentResolver());
           results.push(comment.shortID);
         }
         if (results.length === 0) {
@@ -22113,7 +22147,7 @@ Summary: ${summary}`);
     }
   });
   server2.registerTool("remarc_create_session", {
-    description: "Create a new Remarc session and link it to this agent session. Use when the user asks to start a Remarc session mid-conversation. Comments made in Remarc will be attached to subsequent messages.",
+    description: "Create a new Remarc session and link it to this agent session. Supported for Claude Code and Codex only. OMP must create or select the session in Remarc and reuse it with remarc_list_sessions.",
     inputSchema: {
       name: external_exports.string().describe("Session name (e.g. directory name or task description)."),
       claude_session_id: external_exports.string().describe("Your agent session ID (provided in your session context)."),
@@ -22122,6 +22156,12 @@ Summary: ${summary}`);
       )
     }
   }, async ({ name, claude_session_id, harness }) => {
+    const serverHarness = currentHarness();
+    if (serverHarness === "omp") {
+      return errorResult(
+        "OMP cannot create Remarc sessions yet. Create or select a session in the Remarc app, then use remarc_list_sessions to reuse it."
+      );
+    }
     try {
       const created = await withDocument((state) => {
         const MAX_ACTIVE_SESSIONS = 8;
@@ -22171,7 +22211,7 @@ Summary: ${summary}`);
           // connection - and those differ whenever one agent runs inside another.
           // `claudeCodeSessionId` keeps its name for schema compatibility but
           // holds whichever harness's session id this is.
-          origin: harness ?? currentHarness(),
+          origin: harness ?? serverHarness,
           claudeCodeSessionId: claude_session_id,
           unknownFields: {}
         });
@@ -22200,7 +22240,7 @@ setHarnessFromArgv(process.argv);
 var server = new McpServer(
   {
     name: "remarc",
-    version: "0.1.0"
+    version: "0.2.0"
   },
   {
     instructions: `Remarc is a macOS contextual commenting app. Comments have short IDs (first 5 UUID chars, e.g. 'a3f2b'). After addressing a comment, call remarc_set_status with status "resolved" and a brief summary of what you did. When resolving multiple comments, use remarc_bulk_set_status to save context.`

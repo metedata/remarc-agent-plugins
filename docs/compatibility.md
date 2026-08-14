@@ -6,41 +6,51 @@ This page distinguishes currently supported behavior from code that merely exist
 
 The following versions and artifacts were inspected on 2026-08-14. They are not
 all one end-to-end tested combination: package tests and Claude marketplace
-validation ran locally; the shipping app, CLI commands, and source baselines
-were checked separately; OMP is a research target only.
+validation ran locally; the shipping app and Codex CLI were checked separately.
+OMP 17.3.4 was exercised from an isolated profile through marketplace install,
+skill discovery, TUI MCP discovery, and the installed MCP bundle.
 
 | Component | Baseline |
 | --- | --- |
 | Remarc | 1.0.1 |
-| Remarc plugins | 0.10.0 |
+| Remarc plugins | 0.11.0 |
 | macOS | Remarc's minimum is macOS 14.0 |
 | CI Node.js | 22 |
 | Bundle target | Node.js 18 |
 | Claude Code | 2.1.226 |
 | Codex CLI | 0.146.1 |
-| OMP research target | 17.3.4 at commit `ffd53ff` |
+| OMP | 17.3.4 at commit `ffd53ff` |
 
 These are not permanent minimum-version guarantees. CI currently exercises
 macOS with Node 22, not a Node-version matrix.
 
-The current clean-install smoke test covers Claude Code only. Codex support is
-shipped by Remarc 1.0.1 and its commands were checked against the CLI baseline
-above, but Codex manifest, discovery, and clean-install coverage still need to
-be added to this repository's CI.
+The OMP pre-publication smoke uses a local candidate marketplace and confirms
+that OMP installs a cached copy rather than a symlink to the checkout. The same
+smoke must be repeated against `metedata/remarc-agent-plugins` after merge; that
+public Git-marketplace run cannot be completed before the candidate exists on
+the remote default branch. Codex support is shipped by Remarc 1.0.1 and its
+commands were checked against the CLI baseline above, but Codex manifest,
+discovery, and clean-install coverage still need to be added to this
+repository's CI.
 
 ## Capability matrix
 
 | Capability | Claude Code | Codex | OMP |
 | --- | --- | --- | --- |
-| Marketplace installation | Supported | Supported | Proposed |
-| `remarc` skill | Supported | Supported | Proposed |
-| Remarc MCP tools | Supported | Supported | Proposed |
+| Marketplace installation | Supported | Supported | Supported |
+| `remarc` skill | Supported | Supported | Supported |
+| Remarc MCP tools | Supported | Supported | Supported except session creation |
 | Create a correctly labelled linked session | Supported | Supported | Not supported |
 | Automatic start/prompt context injection | Experimental, optional | Not in the supported app flow | Not proposed in phase 1 |
 | Instant delivery to an idle agent | Experimental, optional | Not supported | Proposed |
 | Settings install/status UI | Supported | Supported | Not planned for the first integration |
 
-OMP is listed because a source-grounded path has been designed. No OMP manifest, extension, compatibility CI, or supported install flow exists in this repository yet.
+OMP core support is distributed through its own catalog and uses the existing
+MCP bundle and skill. Its package root follows Agent Plugins 1.0:
+`plugins/remarc/plugin.json` declares the plugin and
+`plugins/remarc/mcp.json` launches the bundle from `${PLUGIN_ROOT}`. The
+optional wake extension, app-side live reachability, and persisted OMP session
+origin remain separate planned phases.
 
 ## Supported installation commands
 
@@ -64,6 +74,20 @@ codex plugin marketplace add metedata/remarc-agent-plugins
 codex plugin marketplace upgrade remarc
 codex plugin add remarc@remarc
 ```
+
+OMP:
+
+```sh
+omp plugin marketplace add metedata/remarc-agent-plugins
+omp plugin install remarc@remarc
+```
+
+Refresh with `/reload-plugins`, then verify `/mcp list` shows the
+`remarc:remarc` server under `Agent Plugins` and run
+`/mcp test remarc:remarc`. OMP converts the server and MCP tool names into
+agent-callable identifiers such as
+`mcp__remarc_remarc_remarc_list_sessions`. See the
+[OMP guide](integrations/omp.md) for scope and lifecycle commands.
 
 These are the commands used by Remarc 1.0.1. Agent CLIs change independently; consult the agent's own help when a newer version rejects a command.
 
@@ -90,9 +114,8 @@ Lifecycle or instant-delivery support additionally requires session-scoped routi
 - Core-only Codex fetches comments on demand through MCP; it does not inject them automatically or wake an idle session.
 - The optional hooks are experimental and use agent lifecycle surfaces that can change independently.
 - Session origin and attribution still contain legacy Claude-named fields; new harnesses must not silently reuse a false origin.
-- The installed shared skill still uses legacy automatic-attachment wording.
-  Core-only Codex must fetch comments on demand; automatic prompt attachment
-  requires a lifecycle integration.
+- OMP cannot call `remarc_create_session`; create or select the session in the
+  Remarc app and reuse it through `remarc_list_sessions`.
 - Status updates retain a summary only for `resolved`; an `inProgress` summary
   supplied by the current skill is discarded by the data writer.
 

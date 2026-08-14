@@ -1,0 +1,28 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "remarc",
+  "owner": {
+    "name": "Mete Polat",
+    "email": "mete@metedata.com"
+  },
+  "metadata": {
+    "description": "Official Remarc integrations for OMP."
+  },
+  "plugins": [
+    {
+      "name": "remarc",
+      "source": "./plugins/remarc",
+      "version": "0.11.0",
+      "description": "MCP server and workflow skill for reading and addressing Remarc comments from OMP.",
+      "author": {
+        "name": "Mete Polat",
+        "email": "metepolat.a@gmail.com"
+      },
+      "homepage": "https://remarc.app",
+      "repository": "https://github.com/metedata/remarc-agent-plugins",
+      "license": "MIT",
+      "keywords": ["remarc", "comments", "macos", "code-review"],
+      "category": "development"
+    }
+  ]
+}

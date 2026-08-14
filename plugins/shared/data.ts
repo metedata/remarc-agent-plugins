@@ -576,14 +576,15 @@ export function applyStatusUpdate(
   comment: Comment,
   status: CommentStatus,
   summary: string | undefined | null,
-  now: Date
+  now: Date,
+  resolvedBy = "claude"
 ): void {
   comment.status = status;
   comment.updatedAt = now;
 
   if (status === "resolved") {
     comment.resolutionSummary = summary!;
-    comment.resolvedBy = "claude";
+    comment.resolvedBy = resolvedBy;
     comment.resolvedAt = now;
   } else {
     comment.resolutionSummary = null;

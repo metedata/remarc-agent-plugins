@@ -6,7 +6,7 @@ This repository owns the agent side of Remarc. The [Remarc repository](https://g
 
 ```mermaid
 flowchart LR
-    A["Claude Code or Codex"] --> P["Marketplace plugin"]
+    A["Claude Code, Codex, or OMP"] --> P["Marketplace plugin"]
     P --> M["Remarc MCP server"]
     M -->|"locked read or write"| D["comments.json"]
     R["Remarc.app"] -->|"locked read or write"| D
@@ -39,7 +39,8 @@ The app must not edit an agent's private plugin registry. Its Claude Code and Co
 
 - a stdio MCP server with seven tools;
 - the `remarc` workflow skill;
-- separate Claude Code and Codex manifests;
+- separate Claude Code and Codex manifests plus portable Agent Plugins 1.0
+  `plugin.json` and `mcp.json` files for OMP;
 - a committed, self-contained `mcp/dist/index.js` bundle.
 
 The MCP server reads and writes Remarc's data with the same lock and atomic-replacement rules as the app. It preserves fields it does not understand so an older plugin cannot erase data introduced by a newer app.
@@ -114,10 +115,14 @@ See [RELEASING.md](../RELEASING.md).
 
 ## Current compatibility constraints
 
-- Public harness declarations currently support `claudeCode` and `codex` only.
+- The MCP runtime recognizes OMP as a caller so it can enforce an OMP-specific
+  create-session guard. Persisted session-origin and create-session input
+  declarations still support only `claudeCode` and `codex`.
 - Runtime decoders preserve unknown session-origin strings, but the current JSON Schema lists only `manual`, `claudeCode`, and `codex`. A new harness must reconcile that schema before it writes a new origin.
 - The legacy field name `claudeCodeSessionId` stores the linked agent-session identifier for both supported harnesses.
-- The status writer's `resolvedBy` attribution is legacy-shaped and should be made harness-aware before a new harness depends on it.
+- MCP resolutions use the trusted launch identity for `resolvedBy`: `claude`,
+  `codex`, or `omp`. Claude lifecycle-hook writes retain the legacy `claude`
+  attribution.
 - The current marker serializer keeps known fields only. A new harness-specific
   lease must add unknown-field preservation before it extends the shared marker.
 - The marker contract has no explicit protocol version. Breaking changes require coordinated app and plugin releases.
