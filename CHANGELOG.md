@@ -11,6 +11,24 @@ handshake and is recorded separately when it changes.
 
 No entries yet.
 
+## 0.13.0 - 2026-08-16
+
+### Added
+
+- Screenshot comments now return the captured image inline. `remarc_get_comment`
+  attaches the screenshot as an image block alongside its text, so an agent sees
+  it directly instead of being handed a file path. This makes screenshot
+  comments usable in clients that cannot read an arbitrary local path (for
+  example Claude Desktop), and saves a file-read round-trip in clients that can.
+  An oversized, missing, or unsupported image falls back to the path-only text
+  result.
+
+### Changed
+
+- Reconciled the reference-only comment support and readable screenshot paths
+  with the 0.12.1 OMP integration line; the two had been developed in parallel
+  and never combined. The MCP server implementation version moves to 0.4.0.
+
 ## 0.12.1 - 2026-08-15
 
 ### Added
