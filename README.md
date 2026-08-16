@@ -25,7 +25,7 @@ The current verified baseline is recorded in [Compatibility](docs/compatibility.
 - Node.js available as `node`. The committed bundles target Node 18; CI currently builds and tests with Node 22.
 - A supported agent CLI for marketplace installation.
 
-Remarc data and screenshot paths live under `~/Library/Application Support/Remarc/`. A remote or containerized agent needs access to those local paths to inspect screenshot comments.
+Remarc data and screenshot files live under `~/Library/Application Support/Remarc/`. Screenshot comments return their image inline through `remarc_get_comment`, so an agent can see them without local file access. Reaching the original files on disk (for other comment data, or to open a screenshot at full resolution) still needs access to those local paths, which a remote or containerized agent may lack.
 
 ## Install
 
