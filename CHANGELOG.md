@@ -27,7 +27,7 @@ No entries yet.
 
 - Reconciled the reference-only comment support and readable screenshot paths
   with the 0.12.1 OMP integration line; the two had been developed in parallel
-  and never combined. The MCP server implementation version moves to 0.4.0.
+  and never combined.
 
 ## 0.12.1 - 2026-08-15
 
