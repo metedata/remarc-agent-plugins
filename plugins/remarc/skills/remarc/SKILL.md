@@ -96,8 +96,9 @@ Reference-only comments are valid for selections, screenshots, and web
 elements. Quick Notes should have text because they carry no separate context;
 if an old or malformed empty Quick Note appears, do not guess its intent.
 
-For screenshot comments, use the returned image path with the platform's image
-viewing tool when visual inspection matters.
+Screenshot comments attach the image directly to `remarc_get_comment`; inspect
+it there. Use `Image Path` only to open the original file (for example to crop
+or zoom), and only if your client can read local files.
 
 For web-element comments, use the selector to grep the codebase, or the
 component name and file path to jump straight to source.

@@ -21964,9 +21964,50 @@ function currentHarness(env = process.env) {
   return "claudeCode";
 }
 
+// src/screenshot.ts
+import { readFile as readFile3 } from "node:fs/promises";
+import { dirname as dirname2, extname, isAbsolute, resolve } from "node:path";
+var MAX_SCREENSHOT_BYTES = 35e5;
+var MIME_BY_EXTENSION = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp"
+};
+function resolveScreenshotPath(storedPath, dataFilePath) {
+  return isAbsolute(storedPath) ? storedPath : resolve(dirname2(dataFilePath), storedPath);
+}
+async function loadScreenshotImage(imagePath) {
+  const mimeType = MIME_BY_EXTENSION[extname(imagePath).toLowerCase()];
+  if (!mimeType) {
+    const ext = extname(imagePath) || "none";
+    return { ok: false, reason: `unsupported image type (extension: ${ext})` };
+  }
+  let bytes;
+  try {
+    bytes = await readFile3(imagePath);
+  } catch {
+    return { ok: false, reason: "the image file is missing or unreadable" };
+  }
+  if (bytes.byteLength > MAX_SCREENSHOT_BYTES) {
+    const mb = (bytes.byteLength / 1e6).toFixed(1);
+    const capMb = (MAX_SCREENSHOT_BYTES / 1e6).toFixed(1);
+    return {
+      ok: false,
+      reason: `the image is ${mb} MB, over the ${capMb} MB inline limit`
+    };
+  }
+  return {
+    ok: true,
+    data: bytes.toString("base64"),
+    mimeType,
+    byteLength: bytes.byteLength
+  };
+}
+
 // src/tools.ts
 import { randomUUID } from "node:crypto";
-import { dirname as dirname2, isAbsolute, resolve } from "node:path";
 function textResult(text) {
   return { content: [{ type: "text", text }] };
 }
@@ -22044,10 +22085,11 @@ function formatCommentDetail(comment, sessions, dataFilePath = getDataFilePath()
     lines.push(`App Bundle ID: ${comment.appBundleID}`);
   }
   if ("screenshot" in comment.type) {
-    const storedPath = comment.type.screenshot.imagePath;
-    const imagePath = isAbsolute(storedPath) ? storedPath : resolve(dirname2(dataFilePath), storedPath);
+    const imagePath = resolveScreenshotPath(
+      comment.type.screenshot.imagePath,
+      dataFilePath
+    );
     lines.push(`Image Path: ${imagePath}`);
-    lines.push(`(Use the Read tool to view this image file.)`);
   }
   lines.push(`Session: ${sessionName} (${comment.sessionID})`);
   lines.push(`Created: ${date3}`);
@@ -22178,7 +22220,35 @@ ${formatted.join("\n\n")}${nudge}`);
       if (!comment) {
         return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
       }
-      return textResult(formatCommentDetail(comment, state.sessions));
+      const detail = formatCommentDetail(comment, state.sessions);
+      if ("screenshot" in comment.type) {
+        const imagePath = resolveScreenshotPath(
+          comment.type.screenshot.imagePath,
+          getDataFilePath()
+        );
+        const image = await loadScreenshotImage(imagePath);
+        if (image.ok) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `${detail}
+(The screenshot is attached to this result as an image.)`
+              },
+              {
+                type: "image",
+                data: image.data,
+                mimeType: image.mimeType
+              }
+            ]
+          };
+        }
+        return textResult(
+          `${detail}
+(The screenshot could not be attached: ${image.reason}. Read the file at the Image Path above if your client has a file-reading tool.)`
+        );
+      }
+      return textResult(detail);
     } catch (err) {
       return errorResult(String(err));
     }

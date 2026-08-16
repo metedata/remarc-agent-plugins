@@ -20,8 +20,8 @@ import {
 import { notifyRemarcReload } from "./notify.js";
 import { writeMarker } from "./marker.js";
 import { currentHarness } from "./harness.js";
+import { loadScreenshotImage, resolveScreenshotPath } from "./screenshot.js";
 import { randomUUID } from "node:crypto";
-import { dirname, isAbsolute, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -135,12 +135,13 @@ export function formatCommentDetail(
     lines.push(`App Bundle ID: ${comment.appBundleID}`);
   }
   if ("screenshot" in comment.type) {
-    const storedPath = comment.type.screenshot.imagePath;
-    const imagePath = isAbsolute(storedPath)
-      ? storedPath
-      : resolve(dirname(dataFilePath), storedPath);
+    const imagePath = resolveScreenshotPath(
+      comment.type.screenshot.imagePath,
+      dataFilePath
+    );
     lines.push(`Image Path: ${imagePath}`);
-    lines.push(`(Use the Read tool to view this image file.)`);
+    // The image itself is attached to remarc_get_comment's result; the handler
+    // appends the note that says whether it was inlined or must be read by path.
   }
   lines.push(`Session: ${sessionName} (${comment.sessionID})`);
   lines.push(`Created: ${date}`);
@@ -319,7 +320,41 @@ export function registerTools(server: McpServer): void {
         return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
       }
 
-      return textResult(formatCommentDetail(comment, state.sessions));
+      const detail = formatCommentDetail(comment, state.sessions);
+
+      // Screenshot comments carry the picture that is the whole point of the
+      // comment. Attach it as an MCP image block so the agent can see it
+      // directly - clients without a filesystem Read tool (e.g. Claude Desktop)
+      // cannot open the path, and even those that can save a round-trip. Fall
+      // back to a path-only text result if the image can't be inlined.
+      if ("screenshot" in comment.type) {
+        const imagePath = resolveScreenshotPath(
+          comment.type.screenshot.imagePath,
+          getDataFilePath()
+        );
+        const image = await loadScreenshotImage(imagePath);
+        if (image.ok) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `${detail}\n(The screenshot is attached to this result as an image.)`,
+              },
+              {
+                type: "image" as const,
+                data: image.data,
+                mimeType: image.mimeType,
+              },
+            ],
+          };
+        }
+        return textResult(
+          `${detail}\n(The screenshot could not be attached: ${image.reason}. ` +
+            `Read the file at the Image Path above if your client has a file-reading tool.)`
+        );
+      }
+
+      return textResult(detail);
     } catch (err) {
       return errorResult(String(err));
     }
