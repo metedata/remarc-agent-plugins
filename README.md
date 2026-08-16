@@ -46,6 +46,8 @@ claude plugin install remarc-hooks@remarc
 
 After changing plugins in an active Claude Code session, run `/reload-plugins`.
 
+Update the plugin with `claude plugin update remarc@remarc` (run `claude plugin marketplace update remarc` first if the marketplace hasn't refreshed). Updates are not automatic for a self-hosted marketplace: turn them on once with `/plugin` → Marketplaces → remarc → Enable auto-update. The MCP server and skill update together.
+
 See the [Claude Code guide](https://docs.remarc.app/agents/claude-code/) and [`remarc-hooks` documentation](plugins/remarc-hooks/README.md) for delivery behavior and removal instructions.
 
 ### Codex
