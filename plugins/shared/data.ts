@@ -165,6 +165,20 @@ export interface Comment {
   unknownFields: Record<string, unknown>;
 }
 
+/**
+ * Stable display value for a comment whose optional instruction body is empty.
+ *
+ * `commentText` stays a required string on disk so old readers keep decoding
+ * the record. An empty or whitespace-only value means the comment's contextual
+ * reference is the whole comment, not that the record is malformed or should
+ * be hidden.
+ */
+export const NO_COMMENT_BODY = "(none)";
+
+export function displayCommentBody(commentText: string): string {
+  return commentText.trim().length === 0 ? NO_COMMENT_BODY : commentText;
+}
+
 export interface RawSession {
   id: string;
   name: string;

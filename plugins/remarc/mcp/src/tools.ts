@@ -5,6 +5,7 @@ import {
   writeAppState,
   withDocument,
   getDataFilePath,
+  displayCommentBody,
   typeLabel,
   typeIdentifier,
   formatDate,
@@ -20,6 +21,7 @@ import { notifyRemarcReload } from "./notify.js";
 import { writeMarker } from "./marker.js";
 import { currentHarness } from "./harness.js";
 import { randomUUID } from "node:crypto";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,7 +75,7 @@ function findComment(
   return comments.find((c) => c.id.toLowerCase().startsWith(normalized));
 }
 
-function formatCommentLine(comment: Comment, sessions: Session[]): string {
+export function formatCommentLine(comment: Comment, sessions: Session[]): string {
   const statusTag = `[${comment.status}]`;
   const ref = typeLabel(comment.type, comment.webContext);
   const session = findSession(sessions, comment.sessionID);
@@ -83,7 +85,7 @@ function formatCommentLine(comment: Comment, sessions: Session[]): string {
 
   const lines: string[] = [];
   lines.push(`[${typeIdentifier(comment.type)}] ${statusTag} ${ref}`);
-  lines.push(`  Comment: ${comment.commentText}`);
+  lines.push(`  Comment: ${displayCommentBody(comment.commentText)}`);
   lines.push(`  Source: ${source} | Session: ${sessionName} | ${date}`);
   lines.push(`  ID: ${comment.id} (${comment.shortID})`);
 
@@ -99,6 +101,93 @@ function formatCommentLine(comment: Comment, sessions: Session[]): string {
     }
     if (comment.resolvedAt) {
       lines.push(`  Resolved at: ${formatDate(comment.resolvedAt)}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/** Full-detail rendering used by remarc_get_comment. */
+export function formatCommentDetail(
+  comment: Comment,
+  sessions: Session[],
+  dataFilePath = getDataFilePath()
+): string {
+  const session = findSession(sessions, comment.sessionID);
+  const sessionName = session ? session.name : "Unknown Session";
+  const ref = typeLabel(comment.type, comment.webContext);
+  const date = formatDate(comment.createdAt);
+  const updated = formatDate(comment.updatedAt);
+
+  const lines: string[] = [];
+  lines.push(`Comment: ${comment.id} (${comment.shortID})`);
+  lines.push(`Status: ${comment.status}`);
+  lines.push(`Type: ${typeIdentifier(comment.type)}`);
+  lines.push(`Reference: ${ref}`);
+  if ("comment" in comment.type) {
+    // typeLabel is intentionally a compact preview for list/reference fields.
+    // Full detail must also expose the exact selection as its own value.
+    lines.push(`Selected Text: ${comment.type.comment.text}`);
+  }
+  lines.push(`Text: ${displayCommentBody(comment.commentText)}`);
+  lines.push(`Source: ${comment.source}`);
+  if (comment.appBundleID) {
+    lines.push(`App Bundle ID: ${comment.appBundleID}`);
+  }
+  if ("screenshot" in comment.type) {
+    const storedPath = comment.type.screenshot.imagePath;
+    const imagePath = isAbsolute(storedPath)
+      ? storedPath
+      : resolve(dirname(dataFilePath), storedPath);
+    lines.push(`Image Path: ${imagePath}`);
+    lines.push(`(Use the Read tool to view this image file.)`);
+  }
+  lines.push(`Session: ${sessionName} (${comment.sessionID})`);
+  lines.push(`Created: ${date}`);
+  lines.push(`Updated: ${updated}`);
+
+  const wcLines = formatWebContextSection(comment.webContext);
+  if (wcLines.length > 0) {
+    lines.push("");
+    lines.push(...wcLines);
+  }
+
+  if (comment.regionElements && comment.regionElements.length > 0) {
+    lines.push("");
+    lines.push(`Region Elements (${comment.regionElements.length}):`);
+    comment.regionElements.forEach((el, idx) => {
+      const preview = webContextPreview(el) ?? "(unidentified)";
+      lines.push(`  [${idx + 1}] ${preview}`);
+      const selector =
+        (typeof el.selector === "string" && el.selector) ||
+        (typeof el.elementPath === "string" && el.elementPath) ||
+        null;
+      if (selector) lines.push(`      Selector: ${selector}`);
+      if (el.boundingBox) {
+        const bb = el.boundingBox;
+        if (
+          bb.width != null &&
+          bb.height != null &&
+          bb.x != null &&
+          bb.y != null
+        ) {
+          lines.push(
+            `      Bounding Box: ${bb.width}x${bb.height} at (${bb.x}, ${bb.y})`
+          );
+        }
+      }
+    });
+  }
+
+  if (comment.status === "resolved") {
+    if (comment.resolutionSummary) {
+      lines.push(`Resolution Summary: ${comment.resolutionSummary}`);
+    }
+    if (comment.resolvedBy) {
+      lines.push(`Resolved By: ${comment.resolvedBy}`);
+    }
+    if (comment.resolvedAt) {
+      lines.push(`Resolved At: ${formatDate(comment.resolvedAt)}`);
     }
   }
 
@@ -230,76 +319,7 @@ export function registerTools(server: McpServer): void {
         return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
       }
 
-      const session = findSession(state.sessions, comment.sessionID);
-      const sessionName = session ? session.name : "Unknown Session";
-      const ref = typeLabel(comment.type, comment.webContext);
-      const date = formatDate(comment.createdAt);
-      const updated = formatDate(comment.updatedAt);
-
-      const lines: string[] = [];
-      lines.push(`Comment: ${comment.id} (${comment.shortID})`);
-      lines.push(`Status: ${comment.status}`);
-      lines.push(`Type: ${typeIdentifier(comment.type)}`);
-      lines.push(`Reference: ${ref}`);
-      lines.push(`Text: ${comment.commentText}`);
-      lines.push(`Source: ${comment.source}`);
-      if (comment.appBundleID) {
-        lines.push(`App Bundle ID: ${comment.appBundleID}`);
-      }
-      if (comment.type && "screenshot" in comment.type) {
-        lines.push(`Image Path: ${comment.type.screenshot.imagePath}`);
-        lines.push(`(Use the Read tool to view this image file.)`);
-      }
-      lines.push(`Session: ${sessionName} (${comment.sessionID})`);
-      lines.push(`Created: ${date}`);
-      lines.push(`Updated: ${updated}`);
-
-      const wcLines = formatWebContextSection(comment.webContext);
-      if (wcLines.length > 0) {
-        lines.push("");
-        lines.push(...wcLines);
-      }
-
-      if (comment.regionElements && comment.regionElements.length > 0) {
-        lines.push("");
-        lines.push(`Region Elements (${comment.regionElements.length}):`);
-        comment.regionElements.forEach((el, idx) => {
-          const preview = webContextPreview(el) ?? "(unidentified)";
-          lines.push(`  [${idx + 1}] ${preview}`);
-          const selector =
-            (typeof el.selector === "string" && el.selector) ||
-            (typeof el.elementPath === "string" && el.elementPath) ||
-            null;
-          if (selector) lines.push(`      Selector: ${selector}`);
-          if (el.boundingBox) {
-            const bb = el.boundingBox;
-            if (
-              bb.width != null &&
-              bb.height != null &&
-              bb.x != null &&
-              bb.y != null
-            ) {
-              lines.push(
-                `      Bounding Box: ${bb.width}x${bb.height} at (${bb.x}, ${bb.y})`
-              );
-            }
-          }
-        });
-      }
-
-      if (comment.status === "resolved") {
-        if (comment.resolutionSummary) {
-          lines.push(`Resolution Summary: ${comment.resolutionSummary}`);
-        }
-        if (comment.resolvedBy) {
-          lines.push(`Resolved By: ${comment.resolvedBy}`);
-        }
-        if (comment.resolvedAt) {
-          lines.push(`Resolved At: ${formatDate(comment.resolvedAt)}`);
-        }
-      }
-
-      return textResult(lines.join("\n"));
+      return textResult(formatCommentDetail(comment, state.sessions));
     } catch (err) {
       return errorResult(String(err));
     }

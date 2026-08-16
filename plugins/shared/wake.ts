@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { readAppState, type AppState, type Comment } from "./data.js";
+import {
+  readAppState,
+  NO_COMMENT_BODY,
+  type AppState,
+  type Comment,
+} from "./data.js";
 import {
   readAllMarkers,
   readMarker,
@@ -219,13 +224,22 @@ export function buildWakePayload(
     const bodyToken = sentinelWrap("").token;
     const bodyBlock = (text: string): string =>
       `<<<REMARC-DATA-${bodyToken}>>>\n${text}\n<<<END-${bodyToken}>>>`;
+    // A reference-only comment carries no body; mark it (none) rather than
+    // wrapping an empty sentinel block. Truncation only runs for oversized
+    // bodies, which are never empty, so it keeps the sentinel-wrapped form.
+    const renderComment = (body: string, truncated: boolean): string => {
+      if (!truncated && body.trim().length === 0) {
+        return `  comment: ${NO_COMMENT_BODY}`;
+      }
+      return truncated
+        ? `  comment (truncated - fetch the full text with remarc_get_comment): ${bodyBlock(body)}`
+        : `  comment: ${bodyBlock(body)}`;
+    };
     const renderEntry = (body: string, truncated: boolean): string =>
       [
         `- id: ${candidate.id}`,
         `  session: ${name.block}`,
-        truncated
-          ? `  comment (truncated - fetch the full text with remarc_get_comment): ${bodyBlock(body)}`
-          : `  comment: ${bodyBlock(body)}`,
+        renderComment(body, truncated),
         "",
       ].join("\n");
 
