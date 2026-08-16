@@ -11,6 +11,7 @@ var APPLE_EPOCH_OFFSET = 978307200;
 function appleToDate(timestamp) {
   return new Date((timestamp + APPLE_EPOCH_OFFSET) * 1e3);
 }
+var NO_COMMENT_BODY = "(none)";
 function getDataDir() {
   return join(homedir(), "Library", "Application Support", "Remarc");
 }
@@ -789,10 +790,16 @@ function buildWakePayload(candidates) {
     const bodyBlock = (text) => `<<<REMARC-DATA-${bodyToken}>>>
 ${text}
 <<<END-${bodyToken}>>>`;
+    const renderComment = (body, truncated) => {
+      if (!truncated && body.trim().length === 0) {
+        return `  comment: ${NO_COMMENT_BODY}`;
+      }
+      return truncated ? `  comment (truncated - fetch the full text with remarc_get_comment): ${bodyBlock(body)}` : `  comment: ${bodyBlock(body)}`;
+    };
     const renderEntry = (body, truncated) => [
       `- id: ${candidate.id}`,
       `  session: ${name.block}`,
-      truncated ? `  comment (truncated - fetch the full text with remarc_get_comment): ${bodyBlock(body)}` : `  comment: ${bodyBlock(body)}`,
+      renderComment(body, truncated),
       ""
     ].join("\n");
     const fullEntry = renderEntry(candidate.text, false);
