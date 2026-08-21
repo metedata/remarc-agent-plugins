@@ -48,12 +48,15 @@ name, `remarc`.
 
 - `plugin.json` declares the `remarc` package and public integration version;
 - `mcp.json` declares the stdio server and starts
-  `${PLUGIN_ROOT}/mcp/dist/index.js --harness omp`;
+  `${PLUGIN_ROOT}/mcp/dist/index.js`;
 - `skills/remarc/SKILL.md` supplies the workflow guidance.
 
 OMP expands `${PLUGIN_ROOT}` to the cached installed package, not the source
-repository. On the verified OMP 17.3.4 baseline, `/mcp list` displays
-`remarc:remarc` as connected under the `Agent Plugins` provider.
+repository. The shared launcher reads OMP's `omp-coding-agent` identity from
+the MCP initialize handshake; it has no OMP-only launch flag because Codex
+Desktop can consume the same portable manifest. On the verified OMP 17.3.4
+baseline, `/mcp list` displays `remarc:remarc` as connected under the
+`Agent Plugins` provider.
 
 The server continues to expose protocol-level tool names such as
 `remarc_list_sessions`. OMP's agent-facing bridge combines the namespaced
@@ -79,9 +82,9 @@ fields during supported updates.
 ## Session creation and pairing
 
 The OMP-owned MCP process can create sessions with native `origin: "omp"`.
-Its trusted launch identity wins over any model-controlled Claude Code or Codex
-override. OMP leaves the legacy `claudeCodeSessionId` field empty and does not
-write an ownerless marker.
+Its transport-level initialization identity wins over any model-controlled
+Claude Code or Codex override. OMP leaves the legacy `claudeCodeSessionId`
+field empty and does not write an ownerless marker.
 
 Session creation and instant pairing are intentionally separate. Remarc 1.1.0
 or later is required for the app to validate the OMP lease and show Instant
@@ -129,7 +132,7 @@ cached package shape, native OMP session creation, and marker isolation:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.12.1
+  --expected-version 0.13.1
 ```
 
 The script requires the exact `omp/17.3.4` version output and removes only the
@@ -137,9 +140,9 @@ temporary profile it created. A checkout-backed run proves the candidate
 package, but not public distribution. After the commit is merged, repeat the
 same script with
 `--marketplace metedata/remarc-agent-plugins`; that post-merge run is the Git
-marketplace acceptance gate. The [0.12.1
-release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.1)
-completed that public Git-marketplace gate on 2026-08-15, including
+marketplace acceptance gate. The [0.13.1
+release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.13.1)
+completed that public Git-marketplace gate on 2026-08-21, including
 package-local license and third-party-notice checks.
 
 ## Troubleshooting

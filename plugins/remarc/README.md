@@ -7,7 +7,7 @@ It contains:
 - the Remarc MCP server for reading sessions, fetching captured context, and updating comment status;
 - the `remarc` skill for read-only, addressing, and status-only workflows;
 - harness-specific manifests for Claude Code and Codex, plus the portable Agent
-  Plugins 1.0 `plugin.json` and `mcp.json` consumed by OMP.
+  Plugins 1.0 `plugin.json` and `mcp.json` consumed by Codex Desktop and OMP.
 
 ## Requirements
 
@@ -63,13 +63,15 @@ In an active OMP session, run:
 ```
 
 OMP can read and update existing sessions and create sessions with native
-`origin: "omp"`. The trusted OMP launch identity supplies that origin; the
-legacy Claude/Codex session-id field is not required.
+`origin: "omp"`. OMP supplies `omp-coding-agent` in the MCP initialization
+handshake, and the legacy Claude/Codex session-id field is not required.
 
 The OMP catalog installs this directory as the package root. OMP 17.3.4 reads
 the root `plugin.json`, loads the root `mcp.json`, expands `${PLUGIN_ROOT}` to
-the cached installation, and starts the bundled MCP server with
-`--harness omp`. In the TUI, `/mcp list` shows that server as
+the cached installation, and starts the bundled MCP server. The launcher is
+harness-neutral because Codex Desktop can consume the same portable manifest;
+the server distinguishes `omp-coding-agent` from Codex's `codex-mcp-client`
+during initialization. In the TUI, `/mcp list` shows that server as
 `remarc:remarc` under `Agent Plugins`.
 
 See the [OMP integration guide](../../docs/integrations/omp.md) for scoped
@@ -110,8 +112,9 @@ The core MCP plugin works without hooks.
 ## Current limits
 
 - Correctly labelled session creation supports Claude Code, Codex, and OMP.
-  OMP creation relies on the trusted server identity, leaves the legacy
-  `claudeCodeSessionId` empty, and pairs separately through `remarc-wake`.
+  OMP creation relies on its transport-level MCP client identity, leaves the
+  legacy `claudeCodeSessionId` empty, and pairs separately through
+  `remarc-wake`.
 - OMP instant delivery is optional and requires the separately installed
   `remarc-wake` extension plus a Remarc build that understands its v1 lease.
 - Screenshot paths are local to the Mac running Remarc and may be unavailable to a remote agent.

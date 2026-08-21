@@ -31,7 +31,7 @@ function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
 }
 
-/** Durable resolution attribution from the trusted server launch identity. */
+/** Durable resolution attribution from the negotiated MCP client identity. */
 function currentResolver(): string {
   const harness = currentHarness();
   return harness === "claudeCode" ? "claude" : harness;
@@ -594,7 +594,7 @@ export function registerTools(server: McpServer): void {
   // 7. remarc_create_session — create a new session mid-chat
   server.registerTool("remarc_create_session", {
     description:
-      "Create a new Remarc session for Claude Code, Codex, or OMP. OMP sessions use the trusted server identity and pair separately for instant delivery.",
+      "Create a new Remarc session for Claude Code, Codex, or OMP. The server derives the host from the MCP initialization identity; OMP sessions pair separately for instant delivery.",
     inputSchema: {
       name: z.string().describe("Session name (e.g. directory name or task description)."),
       claude_session_id: z
@@ -605,14 +605,14 @@ export function registerTools(server: McpServer): void {
         .enum(["claudeCode", "codex"])
         .optional()
         .describe(
-          "Which agent you are. Pass this - the server cannot tell. One MCP server serves whichever agent connects to it, so a Codex agent running inside Claude Code reaches Claude Code's server and would otherwise be labelled Claude Code."
+          "Override the detected host only for a nested Claude Code or Codex agent. Usually omit this. For example, a Codex agent running inside Claude Code reaches Claude Code's MCP client and must identify the nested agent explicitly."
         ),
     },
   }, async ({ name, claude_session_id, harness }) => {
     const serverHarness = currentHarness();
-    // OMP's Agent Plugins manifest is a trusted process boundary. A
-    // model-controlled Claude/Codex override must never relabel an OMP-owned
-    // server. Nested Claude/Codex sessions keep their existing override path.
+    // The MCP client handshake is outside the model-controlled tool input. A
+    // Claude/Codex override must never relabel a server identified as OMP.
+    // Nested Claude/Codex sessions keep their existing override path.
     const sessionOrigin = serverHarness === "omp"
       ? "omp"
       : (harness ?? serverHarness);

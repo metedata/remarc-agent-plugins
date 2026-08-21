@@ -145,8 +145,9 @@ The 0.11.0 core release used a pre-transaction create guard while the app and
 schema did not yet know OMP origin. Version 0.12.0 completes that coordination:
 
 1. the shared schema and cross-language fixture include `origin: "omp"`;
-2. the OMP-owned MCP process forces native OMP origin from its trusted launch
-   identity, regardless of model-controlled Claude Code or Codex overrides;
+2. the OMP-owned MCP process forces native OMP origin from its transport-level
+   MCP initialization identity, regardless of model-controlled Claude Code or
+   Codex overrides;
 3. OMP creation may omit the legacy `claude_session_id` field;
 4. OMP leaves `claudeCodeSessionId` empty and does not write an ownerless
    historical marker;
@@ -156,7 +157,8 @@ Claude Code and Codex keep their existing session-id and override behavior.
 The native OMP origin is provenance only; instant delivery still requires an
 explicit `/remarc-pair` from the optional wake extension.
 
-The OMP MCP override is explicit:
+The initial 0.12.0 implementation used an explicit OMP launch argument. The
+current portable launcher is shared by Codex Desktop and OMP, so it is neutral:
 
 ```json
 {
@@ -166,18 +168,18 @@ The OMP MCP override is explicit:
       "type": "stdio",
       "command": "node",
       "args": [
-        "${PLUGIN_ROOT}/mcp/dist/index.js",
-        "--harness",
-        "omp"
+        "${PLUGIN_ROOT}/mcp/dist/index.js"
       ]
     }
   }
 }
 ```
 
-Status writes are attributed from the trusted MCP launch
-identity, so OMP resolutions persist `resolvedBy: "omp"` without depending on
-the caller's tool arguments.
+OMP 17.3.4 sends `clientInfo.name: "omp-coding-agent"` during initialization;
+Codex sends `codex-mcp-client`. Status writes are attributed from that
+transport-level identity, so OMP resolutions persist `resolvedBy: "omp"`
+without depending on the caller's tool arguments. Harness-specific flags and
+install paths remain compatibility fallbacks.
 
 ### Phase 1 acceptance
 

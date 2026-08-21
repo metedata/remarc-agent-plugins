@@ -11,6 +11,21 @@ handshake and is recorded separately when it changes.
 
 No entries yet.
 
+## 0.13.1 - 2026-08-21
+
+### Fixed
+
+- The portable Agent Plugins launcher no longer forces the OMP harness. The MCP
+  server now derives Codex and OMP provenance from each client's initialization
+  identity, so Codex Desktop creates `origin: "codex"` sessions and records
+  Codex resolution attribution while OMP keeps its native origin and pairing
+  behavior. The MCP implementation version is now 0.3.1.
+
+### Changed
+
+- Updated the Codex plugin manifest to the current interface metadata contract
+  and retained its explicit Codex launcher as a compatibility path.
+
 ## 0.13.0 - 2026-08-16
 
 ### Added
