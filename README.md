@@ -102,6 +102,8 @@ Comments may contain text captured from web pages, applications, screenshots, or
 Plugins execute with your user account's permissions. Review the source before installation and report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
 The licenses for dependencies bundled into the installed MCP artifact are
 recorded in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The plugin's local data access and agent-provider processing boundary are
+documented in the [privacy policy](PRIVACY.md).
 
 ## Repository layout
 
@@ -144,12 +146,13 @@ own temporary HOME, XDG roots, project, and Remarc fixture:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.13.1
+  --expected-version 0.13.2
 ```
 
-That local-source run proves packaging before publication. The
+That local-source run proves packaging before publication. The last completed
+public marketplace acceptance run is recorded on the
 [0.13.1 release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.13.1)
-also passed the same smoke against
+and passed the same smoke against
 `--marketplace metedata/remarc-agent-plugins`, proving the public Git
 marketplace path, cached installed artifact, and package-local license notices.
 Repeat both paths for future releases. See

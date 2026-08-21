@@ -30,7 +30,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const ompArgument = argumentsByName.get("omp") ?? "omp";
 const ompBinary = ompArgument.includes(sep) ? resolve(ompArgument) : ompArgument;
 const marketplaceSource = argumentsByName.get("marketplace") ?? repositoryRoot;
-const expectedVersion = argumentsByName.get("expected-version") ?? "0.13.1";
+const expectedVersion = argumentsByName.get("expected-version") ?? "0.13.2";
 const keep = argumentsByName.get("keep") === "true";
 const corePluginId = "remarc@remarc";
 const wakePluginId = "remarc-wake@remarc";

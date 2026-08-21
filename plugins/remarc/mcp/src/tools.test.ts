@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatCommentDetail, formatCommentLine } from "./tools.js";
+import {
+  formatCommentDetail,
+  formatCommentLine,
+  registerTools,
+} from "./tools.js";
 import type { Comment, Session } from "./data.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 
 const session: Session = {
   id: "S1",
@@ -103,5 +108,73 @@ describe("reference-only comment formatting", () => {
 
     expect(rendered).toContain("Text: (none)");
     expect(rendered).toContain("Image Path: /tmp/legacy-capture.png");
+  });
+});
+
+describe("tool metadata", () => {
+  it("publishes complete safety annotations for every tool", () => {
+    const registrations = new Map<
+      string,
+      { annotations?: ToolAnnotations }
+    >();
+    const fakeServer = {
+      registerTool(
+        name: string,
+        config: { annotations?: ToolAnnotations }
+      ) {
+        registrations.set(name, config);
+        return {};
+      },
+    };
+
+    registerTools(
+      fakeServer as unknown as Parameters<typeof registerTools>[0]
+    );
+
+    const readOnlyTools = [
+      "remarc_list_sessions",
+      "remarc_list_comments",
+      "remarc_get_comment",
+    ];
+    const idempotentWriteTools = [
+      "remarc_set_status",
+      "remarc_bulk_set_status",
+      "remarc_rename_session",
+    ];
+
+    expect([...registrations.keys()]).toEqual([
+      ...readOnlyTools,
+      ...idempotentWriteTools,
+      "remarc_create_session",
+    ]);
+
+    for (const name of readOnlyTools) {
+      expect(registrations.get(name)?.annotations).toMatchObject({
+        title: expect.any(String),
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+    }
+
+    for (const name of idempotentWriteTools) {
+      expect(registrations.get(name)?.annotations).toMatchObject({
+        title: expect.any(String),
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
+
+    expect(
+      registrations.get("remarc_create_session")?.annotations
+    ).toMatchObject({
+      title: expect.any(String),
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
   });
 });

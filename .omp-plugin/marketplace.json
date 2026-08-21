@@ -12,11 +12,11 @@
     {
       "name": "remarc",
       "source": "./plugins/remarc",
-      "version": "0.13.1",
+      "version": "0.13.2",
       "description": "MCP server and workflow skill for reading and addressing Remarc comments from OMP.",
       "author": {
         "name": "Mete Polat",
-        "email": "metepolat.a@gmail.com"
+        "email": "mete@metedata.com"
       },
       "homepage": "https://remarc.app",
       "repository": "https://github.com/metedata/remarc-agent-plugins",
@@ -27,11 +27,11 @@
     {
       "name": "remarc-wake",
       "source": "./plugins/remarc-wake",
-      "version": "0.13.1",
+      "version": "0.13.2",
       "description": "Optional OMP extension for explicit Remarc session pairing and instant comment delivery.",
       "author": {
         "name": "Mete Polat",
-        "email": "metepolat.a@gmail.com"
+        "email": "mete@metedata.com"
       },
       "homepage": "https://remarc.app",
       "repository": "https://github.com/metedata/remarc-agent-plugins",

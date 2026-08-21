@@ -1,6 +1,6 @@
 {
   "name": "@metedata/remarc-wake",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Optional OMP extension for explicit Remarc session pairing and instant comment delivery.",
   "private": true,
   "type": "module",
