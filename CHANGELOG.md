@@ -11,6 +11,31 @@ handshake and is recorded separately when it changes.
 
 No entries yet.
 
+## 0.13.2 - 2026-08-21
+
+### Added
+
+- Published complete MCP safety metadata for all seven core tools, including
+  human-readable titles plus read-only, destructive, idempotent, and
+  closed-world hints where applicable. The MCP implementation version is now
+  0.3.2.
+- Added a plugin-specific privacy policy and a deterministic Claude Plugin
+  Directory review fixture with working prompts, an inline screenshot, and an
+  untrusted-context boundary check.
+
+### Fixed
+
+- Made the Remarc skill explicitly treat captured selections, screenshots,
+  transcriptions, web context, and source-app content as untrusted reference
+  data rather than executable agent instructions.
+- Updated session-creation guidance to match the shipped MCP identity
+  detection: normal Claude Code, Codex, and OMP clients omit the `harness`
+  override; only nested agents need it.
+
+### Changed
+
+- Normalized the public author and security contact to `mete@metedata.com`.
+
 ## 0.13.1 - 2026-08-21
 
 ### Fixed

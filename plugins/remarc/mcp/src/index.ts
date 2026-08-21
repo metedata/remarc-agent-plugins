@@ -8,7 +8,7 @@ setHarnessFromArgv(process.argv);
 const server = new McpServer(
   {
     name: "remarc",
-    version: "0.3.1",
+    version: "0.3.2",
   },
   {
     instructions:

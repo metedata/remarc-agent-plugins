@@ -22169,7 +22169,14 @@ function formatCommentDetail(comment, sessions, dataFilePath = getDataFilePath()
 }
 function registerTools(server2) {
   server2.registerTool("remarc_list_sessions", {
-    description: "List active Remarc sessions with comment counts."
+    title: "List Remarc sessions",
+    description: "List active Remarc sessions with comment counts.",
+    annotations: {
+      title: "List Remarc sessions",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
+    }
   }, async () => {
     try {
       const state = await loadState();
@@ -22202,7 +22209,14 @@ function registerTools(server2) {
     }
   });
   server2.registerTool("remarc_list_comments", {
+    title: "List Remarc comments",
     description: 'List Remarc comments, filtered by session, status, or type. Note: comments injected via hooks have "handedOff" status, so use status "handedOff" or omit the status filter to find them. After addressing a comment, call remarc_set_status to resolve it.',
+    annotations: {
+      title: "List Remarc comments",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
+    },
     inputSchema: {
       session_id: external_exports.string().optional().describe("Filter by session UUID."),
       status: external_exports.enum(["open", "handedOff", "inProgress", "resolved"]).optional().describe("Filter by status."),
@@ -22246,7 +22260,14 @@ ${formatted.join("\n\n")}${nudge}`);
     }
   });
   server2.registerTool("remarc_get_comment", {
+    title: "Get a Remarc comment",
     description: "Get full details of a comment by ID or short ID (5-char UUID prefix).",
+    annotations: {
+      title: "Get a Remarc comment",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false
+    },
     inputSchema: {
       id: external_exports.string().describe("Full UUID or short ID (e.g. 'a3f2b').")
     }
@@ -22291,7 +22312,15 @@ ${formatted.join("\n\n")}${nudge}`);
     }
   });
   server2.registerTool("remarc_set_status", {
+    title: "Update Remarc comment status",
     description: `Update a comment's status. Use "resolved" (with summary) after addressing it, "inProgress" while working on it, or "open" to reopen.`,
+    annotations: {
+      title: "Update Remarc comment status",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       id: external_exports.string().describe("Full UUID or short ID (e.g. 'a3f2b')."),
       status: external_exports.enum(["handedOff", "inProgress", "resolved", "open"]).describe("New status for the comment."),
@@ -22347,7 +22376,15 @@ Summary: ${summary}`);
     }
   });
   server2.registerTool("remarc_bulk_set_status", {
+    title: "Update multiple Remarc comment statuses",
     description: "Update multiple comments' statuses in one call. Use this instead of calling remarc_set_status repeatedly \u2014 it saves significant context. Provide either specific comment IDs, or a session_id to target all unresolved comments in that session.",
+    annotations: {
+      title: "Update multiple Remarc comment statuses",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       status: external_exports.enum(["handedOff", "inProgress", "resolved", "open"]).describe("New status for all targeted comments."),
       comments: external_exports.array(
@@ -22435,7 +22472,15 @@ Summary: ${summary}`);
     }
   });
   server2.registerTool("remarc_rename_session", {
+    title: "Rename a Remarc session",
     description: "Rename a Remarc session. Use this to give a session a more descriptive name after you understand the task context (e.g. rename from 'Remarc A' to 'Auth Refactor').",
+    annotations: {
+      title: "Rename a Remarc session",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false
+    },
     inputSchema: {
       session_id: external_exports.string().describe("Session UUID to rename."),
       name: external_exports.string().describe("New name for the session (1-3 words, descriptive).")
@@ -22460,7 +22505,15 @@ Summary: ${summary}`);
     }
   });
   server2.registerTool("remarc_create_session", {
+    title: "Create a Remarc session",
     description: "Create a new Remarc session for Claude Code, Codex, or OMP. The server derives the host from the MCP initialization identity; OMP sessions pair separately for instant delivery.",
+    annotations: {
+      title: "Create a Remarc session",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    },
     inputSchema: {
       name: external_exports.string().describe("Session name (e.g. directory name or task description)."),
       claude_session_id: external_exports.string().optional().describe("Your agent session ID. Required for Claude Code and Codex; OMP pairing is owned by remarc-wake."),
@@ -22558,7 +22611,7 @@ setHarnessFromArgv(process.argv);
 var server = new McpServer(
   {
     name: "remarc",
-    version: "0.3.1"
+    version: "0.3.2"
   },
   {
     instructions: `Remarc is a macOS contextual commenting app. Comments have short IDs (first 5 UUID chars, e.g. 'a3f2b'). After addressing a comment, call remarc_set_status with status "resolved" and a brief summary of what you did. When resolving multiple comments, use remarc_bulk_set_status to save context.`

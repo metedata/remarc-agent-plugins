@@ -66,13 +66,13 @@ describe("currentHarness", () => {
 
   it("recognises Codex Desktop's portable plugin cache path", () => {
     expect(currentHarness({
-      PLUGIN_ROOT: "/Users/m/.codex/plugins/cache/remarc/remarc/0.13.1",
+      PLUGIN_ROOT: "/Users/m/.codex/plugins/cache/remarc/remarc/0.13.2",
     })).toBe("codex");
   });
 
   it("recognises OMP's portable plugin cache path", () => {
     expect(currentHarness({
-      PLUGIN_ROOT: "/Users/m/.omp/plugins/cache/remarc/remarc/0.13.1",
+      PLUGIN_ROOT: "/Users/m/.omp/plugins/cache/remarc/remarc/0.13.2",
     })).toBe("omp");
   });
 

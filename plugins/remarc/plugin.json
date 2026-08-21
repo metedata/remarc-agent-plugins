@@ -1,11 +1,11 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "remarc",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Read, address, and resolve Remarc comments from supported coding agents.",
   "author": {
     "name": "Mete Polat",
-    "email": "metepolat.a@gmail.com"
+    "email": "mete@metedata.com"
   },
   "homepage": "https://remarc.app",
   "repository": "https://github.com/metedata/remarc-agent-plugins",

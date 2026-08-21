@@ -121,3 +121,10 @@ The core MCP plugin works without hooks.
 - The plugin reads and writes local Remarc data; tool results are processed by the configured agent provider.
 
 The cross-repository data, lock, marker, and status contracts are documented in [`plugins/shared/contracts.md`](../shared/contracts.md).
+
+## Directory review and privacy
+
+Anthropic reviewers can use the deterministic fixture and prompts in
+[`DIRECTORY_REVIEW.md`](DIRECTORY_REVIEW.md). The plugin's data access,
+provider-processing boundary, storage, and contact details are documented in
+the repository [privacy policy](../../PRIVACY.md).
