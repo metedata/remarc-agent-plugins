@@ -12,7 +12,7 @@
     {
       "name": "remarc",
       "source": "./plugins/remarc",
-      "version": "0.13.0",
+      "version": "0.13.1",
       "description": "MCP server and workflow skill for reading and addressing Remarc comments from OMP.",
       "author": {
         "name": "Mete Polat",
@@ -27,7 +27,7 @@
     {
       "name": "remarc-wake",
       "source": "./plugins/remarc-wake",
-      "version": "0.13.0",
+      "version": "0.13.1",
       "description": "Optional OMP extension for explicit Remarc session pairing and instant comment delivery.",
       "author": {
         "name": "Mete Polat",

@@ -109,8 +109,8 @@ recorded in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 | --- | --- |
 | `.claude-plugin/marketplace.json` | Marketplace catalog consumed by Claude Code and Codex |
 | `.omp-plugin/marketplace.json` | OMP catalog for the core `remarc` and optional `remarc-wake` packages |
-| `plugins/remarc/plugin.json` | Portable Agent Plugins 1.0 manifest consumed by OMP |
-| `plugins/remarc/mcp.json` | Agent Plugins 1.0 MCP definition; launches the bundled server from `${PLUGIN_ROOT}` |
+| `plugins/remarc/plugin.json` | Portable Agent Plugins 1.0 manifest consumed by Codex Desktop and OMP |
+| `plugins/remarc/mcp.json` | Shared Agent Plugins 1.0 MCP definition; launches the bundled server from `${PLUGIN_ROOT}` |
 | `plugins/remarc/` | MCP server, harness manifests, and the shared Remarc skill |
 | `plugins/remarc-hooks/` | Optional lifecycle and instant-delivery integration |
 | `plugins/remarc-wake/` | Optional OMP pairing and instant-delivery extension |
@@ -118,6 +118,11 @@ recorded in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 | `docs/` | Architecture, compatibility, and integration proposals |
 
 Built JavaScript under `dist/` is committed because plugin managers execute the packaged artifact without building it locally. CI rebuilds the bundles and fails if committed output has drifted from source.
+
+The portable MCP launcher is harness-neutral. During MCP initialization the
+server maps Codex's `codex-mcp-client` identity to `origin: "codex"` and OMP's
+`omp-coding-agent` identity to `origin: "omp"`; harness-specific launch flags
+and install paths remain compatibility fallbacks.
 
 ## Development
 
@@ -139,18 +144,18 @@ own temporary HOME, XDG roots, project, and Remarc fixture:
 node scripts/smoke-omp-marketplace.mjs \
   --omp /absolute/path/to/omp \
   --marketplace "$(pwd)" \
-  --expected-version 0.12.1
+  --expected-version 0.13.1
 ```
 
 That local-source run proves packaging before publication. The
-[0.12.1 release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.12.1)
+[0.13.1 release](https://github.com/metedata/remarc-agent-plugins/releases/tag/v0.13.1)
 also passed the same smoke against
 `--marketplace metedata/remarc-agent-plugins`, proving the public Git
 marketplace path, cached installed artifact, and package-local license notices.
 Repeat both paths for future releases. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full contract and fixture checks. Do
 not run a marketplace installation smoke test against your normal agent
-profile. Codex clean-install coverage remains a documented gap.
+profile. Codex clean-install coverage remains outside CI.
 
 ## Releases
 

@@ -1,14 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./tools.js";
-import { setHarnessFromArgv } from "./harness.js";
+import { bindHarnessToMcpServer, setHarnessFromArgv } from "./harness.js";
 
 setHarnessFromArgv(process.argv);
 
 const server = new McpServer(
   {
     name: "remarc",
-    version: "0.3.0",
+    version: "0.3.1",
   },
   {
     instructions:
@@ -16,6 +16,7 @@ const server = new McpServer(
   }
 );
 
+bindHarnessToMcpServer(server.server);
 registerTools(server);
 
 async function main() {

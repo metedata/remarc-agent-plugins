@@ -25,9 +25,9 @@ the MCP initialize handshake. Keep these two MCP version declarations equal:
 - `plugins/remarc/mcp/package.json`
 - `plugins/remarc/mcp/src/index.ts`
 
-That MCP implementation version does not currently equal the marketplace
-version (`0.3.0` versus `0.12.1`). Record it in release notes and bump both
-declarations together when MCP behavior changes.
+The MCP implementation version need not equal the marketplace version. Record
+both in release notes and bump both implementation declarations together when
+MCP behavior changes.
 
 Claude Code uses the plugin manifest version as a cache key. Pushing changed plugin files without increasing that version does not update an existing installation.
 

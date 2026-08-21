@@ -1,21 +1,48 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { currentHarness, setHarnessFromArgv, resetHarnessForTests } from "./harness.js";
+import {
+  currentHarness,
+  setHarnessFromArgv,
+  setHarnessFromClientInfo,
+  resetHarnessForTests,
+} from "./harness.js";
 
 describe("currentHarness", () => {
   beforeEach(() => resetHarnessForTests());
 
-  it("takes the harness the manifest declared", () => {
-    // codex-mcp.json passes this, so Codex never has to be guessed at.
+  it("takes the harness a legacy harness-specific manifest declared", () => {
     setHarnessFromArgv(["node", "index.js", "--harness", "codex"]);
     expect(currentHarness({})).toBe("codex");
   });
 
-  it("recognises OMP only from the explicit manifest declaration", () => {
+  it("accepts the legacy explicit OMP declaration", () => {
     setHarnessFromArgv(["node", "index.js", "--harness", "omp"]);
     expect(currentHarness({
       CLAUDE_PLUGIN_ROOT: "/Users/m/.claude/plugins/x",
       CODEX_HOME: "/Users/m/.codex",
     })).toBe("omp");
+  });
+
+  it.each([
+    ["codex-mcp-client", "codex"],
+    ["codex_vscode", "codex"],
+    ["omp-coding-agent", "omp"],
+    ["oh-my-pi", "omp"],
+    ["claude-code", "claudeCode"],
+  ] as const)("recognises MCP client %s as %s", (name, expected) => {
+    setHarnessFromClientInfo({ name });
+    expect(currentHarness({})).toBe(expected);
+  });
+
+  it("prefers the connected MCP client over a stale portable-manifest flag", () => {
+    setHarnessFromArgv(["node", "index.js", "--harness", "omp"]);
+    setHarnessFromClientInfo({ name: "codex-mcp-client" });
+    expect(currentHarness({})).toBe("codex");
+  });
+
+  it("falls back to a valid manifest declaration for an unknown MCP client", () => {
+    setHarnessFromArgv(["node", "index.js", "--harness", "codex"]);
+    setHarnessFromClientInfo({ name: "unrecognised-client" });
+    expect(currentHarness({})).toBe("codex");
   });
 
   it("ignores a declaration it does not recognise", () => {
@@ -29,20 +56,27 @@ describe("currentHarness", () => {
   });
 
   it("reads CLAUDE_PLUGIN_ROOT when nothing was declared", () => {
-    // Installs predating the flag, and any harness reusing the Claude manifest.
     expect(currentHarness({ CLAUDE_PLUGIN_ROOT: "/Users/m/.claude/plugins/x" }))
       .toBe("claudeCode");
   });
 
   it("recognises a custom CODEX_HOME", () => {
-    // The reason paths alone are only a fallback: CODEX_HOME can point anywhere,
-    // so the plugin root need not mention codex at all.
-    expect(currentHarness({ CODEX_HOME: "/Users/m/.codex" })).toBe("codex");
+    expect(currentHarness({ CODEX_HOME: "/Volumes/AgentData" })).toBe("codex");
+  });
+
+  it("recognises Codex Desktop's portable plugin cache path", () => {
+    expect(currentHarness({
+      PLUGIN_ROOT: "/Users/m/.codex/plugins/cache/remarc/remarc/0.13.1",
+    })).toBe("codex");
+  });
+
+  it("recognises OMP's portable plugin cache path", () => {
+    expect(currentHarness({
+      PLUGIN_ROOT: "/Users/m/.omp/plugins/cache/remarc/remarc/0.13.1",
+    })).toBe("omp");
   });
 
   it("defaults to Claude Code when there is no signal at all", () => {
-    // Claude Code is the harness that has always worked, so an unknown one
-    // keeps today's labelling rather than inventing a new claim.
     expect(currentHarness({})).toBe("claudeCode");
   });
 

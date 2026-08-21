@@ -1,6 +1,6 @@
 {
   "name": "remarc",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Read, address, and resolve Remarc comments from Codex.",
   "author": {
     "name": "Mete Polat",
@@ -15,5 +15,32 @@
     "macos",
     "code-review"
   ],
-  "mcpServers": "./codex-mcp.json"
+  "mcpServers": {
+    "remarc": {
+      "command": "node",
+      "args": [
+        "mcp/dist/index.js",
+        "--harness",
+        "codex"
+      ],
+      "cwd": "."
+    }
+  },
+  "interface": {
+    "displayName": "Remarc",
+    "shortDescription": "Address contextual Remarc comments",
+    "longDescription": "Read, address, and resolve comments captured in the Remarc macOS app.",
+    "developerName": "Mete Polat",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://remarc.app",
+    "defaultPrompt": [
+      "List my active Remarc sessions.",
+      "Show handed-off comments in the active session.",
+      "Address and resolve my Remarc comments."
+    ]
+  }
 }

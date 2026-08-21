@@ -4,7 +4,7 @@ This page distinguishes currently supported behavior from code that merely exist
 
 ## Inspected baselines
 
-The following versions and artifacts were inspected on 2026-08-15. They are not
+The following versions and artifacts were inspected on 2026-08-21. They are not
 all one end-to-end tested combination: package tests and Claude marketplace
 validation ran locally; the shipping app and Codex CLI were checked separately.
 OMP 17.3.4 was exercised from an isolated profile through marketplace install,
@@ -13,7 +13,7 @@ skill discovery, TUI MCP discovery, and the installed MCP bundle.
 | Component | Baseline |
 | --- | --- |
 | Remarc | 1.1.0 for OMP badge and instant delivery; 1.0.1 remains core-only compatible |
-| Remarc plugins | 0.12.1 (this release); 0.12.0 is the prior baseline |
+| Remarc plugins | 0.13.1 (this release); 0.13.0 is the prior baseline |
 | macOS | Remarc's minimum is macOS 14.0 |
 | CI Node.js | 22 |
 | Bundle target | Node.js 18 |
@@ -26,7 +26,7 @@ macOS with Node 22, not a Node-version matrix.
 
 The OMP smoke passed both against a local candidate marketplace and the public
 `metedata/remarc-agent-plugins` Git marketplace. The public run installed
-version 0.12.1 into isolated user and project profiles and verified cached
+version 0.13.1 into isolated user and project profiles and verified cached
 packages, scope shadowing, commands, MCP tools, and marker isolation without a
 symlink to the checkout. Codex commands were checked against the CLI baseline
 above, but Codex manifest, discovery, and clean-install coverage still need to
@@ -51,6 +51,12 @@ MCP bundle and skill. Its package root follows Agent Plugins 1.0:
 optional wake extension and app-side live reachability remain separately
 installable, while the shared schema and MCP runtime preserve native OMP
 session origin.
+
+The portable launcher does not declare a harness because Codex Desktop and OMP
+can both consume it. The MCP initialize handshake is authoritative:
+`codex-mcp-client` maps to Codex and `omp-coding-agent` maps to OMP. Explicit
+harness arguments and recognizable install paths remain compatibility
+fallbacks for older clients and harness-specific manifests.
 
 ## Supported installation commands
 
@@ -119,7 +125,7 @@ Lifecycle or instant-delivery support additionally requires session-scoped routi
 - Session origin and attribution still contain legacy Claude-named fields; new harnesses must not silently reuse a false origin.
 - OMP-created sessions use native `origin: "omp"`. Run `/remarc-pair` after
   creation when that conversation should receive instant delivery.
-- OMP instant delivery requires Remarc 1.1.0 or later. Plugin 0.12.1 may be
+- OMP instant delivery requires Remarc 1.1.0 or later. Plugin 0.13.1 may be
   installed alongside Remarc 1.0.1 for core MCP use, but that public app release
   does not understand the version 1 OMP reachability lease or expose its
   harness-neutral Instant delivery setting.

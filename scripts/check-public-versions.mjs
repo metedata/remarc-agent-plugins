@@ -59,14 +59,15 @@ if (publicVersions.size !== 1) {
 }
 
 const mcpPackageVersion = readJson("plugins/remarc/mcp/package.json").version;
-const mcpSource = readFileSync(resolve(root, "plugins/remarc/mcp/src/index.ts"), "utf8");
+const mcpSourcePath = "plugins/remarc/mcp/src/index.ts";
+const mcpSource = readFileSync(resolve(root, mcpSourcePath), "utf8");
 const mcpSourceMatch = mcpSource.match(/name: "remarc",\s*version: "([^"]+)"/s);
 if (!mcpSourceMatch) {
-  throw new Error("could not find the MCP initialize version in src/index.ts");
+  throw new Error(`could not find the MCP initialize version in ${mcpSourcePath}`);
 }
 if (mcpPackageVersion !== mcpSourceMatch[1]) {
   throw new Error(
-    `MCP implementation versions differ: package.json=${mcpPackageVersion}, src/index.ts=${mcpSourceMatch[1]}`
+    `MCP implementation versions differ: package.json=${mcpPackageVersion}, ${mcpSourcePath}=${mcpSourceMatch[1]}`
   );
 }
 

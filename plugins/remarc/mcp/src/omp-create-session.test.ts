@@ -4,7 +4,11 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerTools } from "./tools.js";
-import { resetHarnessForTests, setHarnessFromArgv } from "./harness.js";
+import {
+  resetHarnessForTests,
+  setHarnessFromArgv,
+  setHarnessFromClientInfo,
+} from "./harness.js";
 
 type CreateSessionInput = {
   name: string;
@@ -60,7 +64,7 @@ beforeEach(async () => {
 
   registerTools(fakeServer);
   if (!createSession) throw new Error("remarc_create_session was not registered");
-  setHarnessFromArgv(["node", "index.js", "--harness", "omp"]);
+  setHarnessFromClientInfo({ name: "omp-coding-agent" });
 });
 
 afterEach(async () => {
@@ -103,6 +107,7 @@ describe.sequential("OMP native session creation", () => {
   });
 
   it("still requires the legacy agent session id outside OMP before writing", async () => {
+    resetHarnessForTests();
     setHarnessFromArgv(["node", "index.js", "--harness", "claudeCode"]);
     const dataBefore = await readFile(dataFile);
     const markersBefore = await markerSnapshot();
@@ -121,6 +126,7 @@ describe.sequential("OMP native session creation", () => {
   });
 
   it("preserves the Claude/Codex override path and legacy marker behavior", async () => {
+    resetHarnessForTests();
     setHarnessFromArgv(["node", "index.js", "--harness", "claudeCode"]);
 
     const result = await createSession({

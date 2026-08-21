@@ -30,7 +30,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const ompArgument = argumentsByName.get("omp") ?? "omp";
 const ompBinary = ompArgument.includes(sep) ? resolve(ompArgument) : ompArgument;
 const marketplaceSource = argumentsByName.get("marketplace") ?? repositoryRoot;
-const expectedVersion = argumentsByName.get("expected-version") ?? "0.12.1";
+const expectedVersion = argumentsByName.get("expected-version") ?? "0.13.1";
 const keep = argumentsByName.get("keep") === "true";
 const corePluginId = "remarc@remarc";
 const wakePluginId = "remarc-wake@remarc";
@@ -274,11 +274,11 @@ async function probeInstalledMcp({ serverPath, env, dataPath, markerDirectory })
     .map((name) => [name, readFileSync(resolve(markerDirectory, name))]);
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [serverPath, "--harness", "omp"],
+    args: [serverPath],
     env,
     stderr: "pipe",
   });
-  const client = new Client({ name: "remarc-omp-smoke", version: "1.0.0" });
+  const client = new Client({ name: "omp-coding-agent", version: "1.0.0" });
 
   const resultText = (result) =>
     result.content

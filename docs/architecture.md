@@ -42,7 +42,7 @@ The app must not edit an agent's private plugin registry. Its Claude Code and Co
 - a stdio MCP server with seven tools;
 - the `remarc` workflow skill;
 - separate Claude Code and Codex manifests plus portable Agent Plugins 1.0
-  `plugin.json` and `mcp.json` files for OMP;
+  `plugin.json` and `mcp.json` files shared by Codex Desktop and OMP;
 - a committed, self-contained `mcp/dist/index.js` bundle.
 
 The MCP server reads and writes Remarc's data with the same lock and atomic-replacement rules as the app. It preserves fields it does not understand so an older plugin cannot erase data introduced by a newer app.
@@ -148,17 +148,20 @@ See [RELEASING.md](../RELEASING.md).
 
 ## Current compatibility constraints
 
-- The MCP runtime recognizes OMP from its trusted Agent Plugins launch identity
-  and persists native `origin: "omp"`; model-controlled Claude/Codex overrides
-  cannot relabel an OMP-owned server.
+- The MCP runtime recognizes Codex and OMP from the MCP initialization
+  identities supplied by their clients (`codex-mcp-client` and
+  `omp-coding-agent`) and persists the matching native origin. A
+  model-controlled Claude/Codex tool override cannot relabel a server whose
+  transport identifies as OMP.
 - Runtime decoders preserve unknown session-origin strings, and the shared JSON
   Schema explicitly lists `manual`, `claudeCode`, `codex`, and `omp`.
 - The legacy field name `claudeCodeSessionId` stores the linked agent-session
   identifier for Claude Code and Codex. OMP leaves it empty because the wake
   extension owns a separate token-leased pairing.
-- MCP resolutions use the trusted launch identity for `resolvedBy`: `claude`,
-  `codex`, or `omp`. Claude lifecycle-hook writes retain the legacy `claude`
-  attribution.
+- MCP resolutions use the negotiated client identity for `resolvedBy`:
+  `claude`, `codex`, or `omp`, with harness-specific arguments and install
+  paths retained as legacy fallbacks. Claude lifecycle-hook writes retain the
+  legacy `claude` attribution.
 - The shared marker serializer preserves unknown fields and supports a
   versioned OMP lease with owner token, PID, heartbeat, and durable pending-wake
   outbox state.
