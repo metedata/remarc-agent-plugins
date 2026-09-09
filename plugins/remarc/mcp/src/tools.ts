@@ -20,7 +20,9 @@ import {
 import { notifyRemarcReload } from "./notify.js";
 import { writeMarker } from "./marker.js";
 import { currentHarness } from "./harness.js";
-import { loadScreenshotImage, resolveScreenshotPath } from "./screenshot.js";
+import { loadScreenshotImage, resolveScreenshotPath, MAX_SCREENSHOT_BYTES, MAX_INLINE_IMAGES } from "./screenshot.js";
+import type { TextContent, ImageContent } from "@modelcontextprotocol/sdk/types.js";
+import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
 // ---------------------------------------------------------------------------
@@ -88,6 +90,9 @@ export function formatCommentLine(comment: Comment, sessions: Session[]): string
   lines.push(`  Comment: ${displayCommentBody(comment.commentText)}`);
   lines.push(`  Source: ${source} | Session: ${sessionName} | ${date}`);
   lines.push(`  ID: ${comment.id} (${comment.shortID})`);
+  if (comment.attachments.length > 0) {
+    lines.push(`  Attachments: ${comment.attachments.length} (call remarc_get_comment to inspect)`);
+  }
 
   const preview = webContextPreview(comment.webContext);
   if (preview) lines.push(`  Context: ${preview}`);
@@ -143,6 +148,9 @@ export function formatCommentDetail(
     // The image itself is attached to remarc_get_comment's result; the handler
     // appends the note that says whether it was inlined or must be read by path.
   }
+  comment.attachments.forEach((path, index) => {
+    lines.push(`Attachment ${index + 1} Path: ${resolveScreenshotPath(path, dataFilePath)}`);
+  });
   lines.push(`Session: ${sessionName} (${comment.sessionID})`);
   lines.push(`Created: ${date}`);
   lines.push(`Updated: ${updated}`);
@@ -322,7 +330,7 @@ export function registerTools(server: McpServer): void {
   server.registerTool("remarc_get_comment", {
     title: "Get a Remarc comment",
     description:
-      "Get full details of a comment by ID or short ID (5-char UUID prefix).",
+      "Get full details of a comment by ID or short ID (5-char UUID prefix), including screenshot and attachment paths with available images inline.",
     annotations: {
       title: "Get a Remarc comment",
       readOnlyHint: true,
@@ -341,41 +349,47 @@ export function registerTools(server: McpServer): void {
         return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
       }
 
-      const detail = formatCommentDetail(comment, state.sessions);
-
-      // Screenshot comments carry the picture that is the whole point of the
-      // comment. Attach it as an MCP image block so the agent can see it
-      // directly - clients without a filesystem Read tool (e.g. Claude Desktop)
-      // cannot open the path, and even those that can save a round-trip. Fall
-      // back to a path-only text result if the image can't be inlined.
-      if ("screenshot" in comment.type) {
-        const imagePath = resolveScreenshotPath(
-          comment.type.screenshot.imagePath,
-          getDataFilePath()
-        );
-        const image = await loadScreenshotImage(imagePath);
-        if (image.ok) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `${detail}\n(The screenshot is attached to this result as an image.)`,
-              },
-              {
-                type: "image" as const,
-                data: image.data,
-                mimeType: image.mimeType,
-              },
-            ],
-          };
+      const dataFilePath = getDataFilePath();
+      const content: Array<TextContent | ImageContent> = [
+        { type: "text", text: formatCommentDetail(comment, state.sessions, dataFilePath) },
+      ];
+      const references = [
+        ...("screenshot" in comment.type
+          ? [{ label: "Screenshot", path: comment.type.screenshot.imagePath }]
+          : []),
+        ...comment.attachments.map((path, index) => ({ label: `Attachment ${index + 1}`, path })),
+      ];
+      let remainingBytes = MAX_SCREENSHOT_BYTES;
+      let imageCount = 0;
+      const seen = new Map<string, string>();
+      for (const reference of references) {
+        const path = resolveScreenshotPath(reference.path, dataFilePath);
+        // Normalize only the deduplication key. Display and open returned paths
+        // as resolved from the record, without consulting current preferences.
+        const key = resolve(path);
+        const previous = seen.get(key);
+        if (previous) {
+          content.push({ type: "text", text: `${reference.label}: same file as ${previous}; see its result above.` });
+          continue;
         }
-        return textResult(
-          `${detail}\n(The screenshot could not be attached: ${image.reason}. ` +
-            `Read the file at the Image Path above if your client has a file-reading tool.)`
-        );
+        seen.set(key, reference.label);
+        const image = imageCount >= MAX_INLINE_IMAGES
+          ? { ok: false as const, reason: `the ${MAX_INLINE_IMAGES}-image inline limit has been reached` }
+          : await loadScreenshotImage(path, remainingBytes);
+        if (!image.ok) {
+          content.push({
+            type: "text",
+            text: `${reference.label} (${path}) could not be attached: ${image.reason}. ` +
+              "Open the returned path only if your client can access that local file.",
+          });
+          continue;
+        }
+        content.push({ type: "text", text: `${reference.label} (${path}) is attached below.` });
+        content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+        remainingBytes -= image.byteLength;
+        imageCount += 1;
       }
-
-      return textResult(detail);
+      return { content };
     } catch (err) {
       return errorResult(String(err));
     }

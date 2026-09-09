@@ -9,7 +9,21 @@ handshake and is recorded separately when it changes.
 
 ## Unreleased
 
-No entries yet.
+### Added
+
+- Candidate 0.13.3 (MCP implementation 0.3.3) exposes pasted image attachments
+  through `remarc_get_comment`, including Quick Notes and text comments. Lists
+  show attachment counts; full detail returns original paths and labeled image
+  blocks. The primary screenshot and attachments share a five-image, 3.5 MB
+  raw-byte budget, with explicit reasons for images that cannot be embedded.
+
+### Fixed
+
+- Bound image-file reads before loading bytes and reject empty or non-regular
+  files. Repeated paths no longer duplicate inline image content.
+- Document default-relative and custom-absolute image paths, original-folder
+  preservation, and client access limits alongside the coordinated Remarc app
+  screenshot-storage change ([Remarc #19](https://github.com/metedata/Remarc/pull/19)).
 
 ## 0.13.2 - 2026-08-21
 

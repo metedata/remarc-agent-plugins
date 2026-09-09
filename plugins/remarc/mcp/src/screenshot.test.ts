@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -88,5 +88,24 @@ describe("loadScreenshotImage", () => {
     const result = await loadScreenshotImage(path);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/over the .* inline limit/);
+  });
+
+  it("enforces the caller's remaining byte budget", async () => {
+    const path = join(dir, "budget.png");
+    const bytes = Buffer.from(PNG_1X1_BASE64, "base64");
+    await writeFile(path, bytes);
+    expect((await loadScreenshotImage(path, bytes.length)).ok).toBe(true);
+    const result = await loadScreenshotImage(path, bytes.length - 1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/remaining shared inline byte budget/);
+  });
+
+  it("refuses an empty file or directory masquerading as an image", async () => {
+    const empty = join(dir, "empty.png");
+    const directory = join(dir, "directory.png");
+    await writeFile(empty, Buffer.alloc(0));
+    await mkdir(directory);
+    expect(await loadScreenshotImage(empty)).toEqual({ ok: false, reason: "the image file is empty" });
+    expect(await loadScreenshotImage(directory)).toEqual({ ok: false, reason: "the image path is not a regular file" });
   });
 });

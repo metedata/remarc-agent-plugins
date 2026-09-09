@@ -1,16 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 
 /**
- * Raw-byte cap for inlining a screenshot into a tool result.
- *
- * Base64 inflates by ~4/3, so 3.5 MB of image is ~4.7 MB on the wire - under
- * every provider's per-image ceiling (Claude API 10 MB, Amazon Bedrock and
- * Google Cloud 5 MB). Anything larger falls back to a path-only text result
- * rather than risk a rejected request. The Remarc screenshot corpus sits well
- * inside this; the cap exists for the pathological case, not the common one.
+ * Raw-byte budget shared by the screenshot and attachments in one tool result.
+ * Base64 expands 3.5 MB to about 4.7 MB. Keep this bounded even when a comment
+ * has many attachments; files that do not fit remain available by path.
  */
 export const MAX_SCREENSHOT_BYTES = 3_500_000;
+export const MAX_INLINE_IMAGES = 5;
 
 /**
  * Extensions Claude can accept as image input, mapped to their MIME type.
@@ -27,9 +25,9 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
 /**
  * Resolve a stored screenshot path to an absolute filesystem path.
  *
- * The app records screenshots relative to the data file (`images/<uuid>.png`);
- * older records stored an absolute path. Relative paths resolve against the
- * data file's directory so a moved Application Support directory still works.
+ * Default storage uses paths relative to the data file (`images/<uuid>.png`).
+ * Custom folders and some legacy records use absolute paths. Never redirect an
+ * existing reference based on the app's current storage-folder preference.
  */
 export function resolveScreenshotPath(
   storedPath: string,
@@ -53,7 +51,8 @@ export type ScreenshotImage =
  * path-only text result instead of failing the tool call.
  */
 export async function loadScreenshotImage(
-  imagePath: string
+  imagePath: string,
+  remainingBytes = MAX_SCREENSHOT_BYTES
 ): Promise<ScreenshotImage> {
   const mimeType = MIME_BY_EXTENSION[extname(imagePath).toLowerCase()];
   if (!mimeType) {
@@ -61,26 +60,44 @@ export async function loadScreenshotImage(
     return { ok: false, reason: `unsupported image type (extension: ${ext})` };
   }
 
-  let bytes: Buffer;
+  const limit = Number.isFinite(remainingBytes)
+    ? Math.max(0, Math.min(MAX_SCREENSHOT_BYTES, Math.floor(remainingBytes)))
+    : 0;
+  const overBudget = (): ScreenshotImage => ({
+    ok: false,
+    reason: limit < MAX_SCREENSHOT_BYTES
+      ? "the image exceeds the remaining shared inline byte budget"
+      : `the image is over the ${MAX_SCREENSHOT_BYTES / 1_000_000} MB inline limit`,
+  });
+  if (limit === 0) return overBudget();
+
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    bytes = await readFile(imagePath);
+    // Nonblocking open lets us reject a FIFO/device without hanging on it.
+    handle = await open(imagePath, constants.O_RDONLY | constants.O_NONBLOCK);
+    const info = await handle.stat();
+    if (!info.isFile()) return { ok: false, reason: "the image path is not a regular file" };
+    if (info.size > limit) return overBudget();
+
+    // Read at most the budget plus one byte, even if the file grows after stat.
+    const buffer = Buffer.alloc(limit + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, size, buffer.length - size, null);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    if (size > limit) return overBudget();
+    if (size === 0) return { ok: false, reason: "the image file is empty" };
+    return {
+      ok: true,
+      data: buffer.subarray(0, size).toString("base64"),
+      mimeType,
+      byteLength: size,
+    };
   } catch {
     return { ok: false, reason: "the image file is missing or unreadable" };
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
-
-  if (bytes.byteLength > MAX_SCREENSHOT_BYTES) {
-    const mb = (bytes.byteLength / 1_000_000).toFixed(1);
-    const capMb = (MAX_SCREENSHOT_BYTES / 1_000_000).toFixed(1);
-    return {
-      ok: false,
-      reason: `the image is ${mb} MB, over the ${capMb} MB inline limit`,
-    };
-  }
-
-  return {
-    ok: true,
-    data: bytes.toString("base64"),
-    mimeType,
-    byteLength: bytes.byteLength,
-  };
 }

@@ -25,7 +25,7 @@ The current verified baseline is recorded in [Compatibility](docs/compatibility.
 - Node.js available as `node`. The committed bundles target Node 18; CI currently builds and tests with Node 22.
 - A supported agent CLI for marketplace installation.
 
-Remarc data and screenshot files live under `~/Library/Application Support/Remarc/`. Screenshot comments return their image inline through `remarc_get_comment`, so an agent can see them without local file access. Reaching the original files on disk (for other comment data, or to open a screenshot at full resolution) still needs access to those local paths, which a remote or containerized agent may lack.
+Remarc sessions and comments live under `~/Library/Application Support/Remarc/`. Images use its `images/` folder by default; app builds with a screenshot-folder setting can store new screenshots and pasted images elsewhere. Existing images keep their original paths. `remarc_get_comment` returns the screenshot and image attachments inline when the MCP server can read them, up to five images sharing a 3.5 MB raw-byte budget. Other images retain their paths and a reason they could not be attached. Opening originals still requires access to those local paths; choosing a folder does not grant that access to a remote or restricted client.
 
 ## Install
 

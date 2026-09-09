@@ -10,6 +10,22 @@ release.
 - **`~/Library/Application Support/Remarc/claude/markers/<agent_session_id>.json`** — per-agent-session marker the plugin writes/reads. The `claude` path component is historical and remains part of the compatibility contract. Shared fields include `remarcSessionId`, `dataFilePath`, `transcriptPath`, `lastActivity`, `wakeCapable` (whether this harness has file-watch + re-wake at all), `deliveredIds` (comment ids already injected as context), and `wakedAt` (comment id to the `wakeRequestedAt` generation already completed). Version 1 OMP leases additionally require `protocolVersion: 1`, `harness: "omp"`, `ownerPid`, a random `ownerToken`, and `leaseHeartbeatAt`; `pendingWake` stores comment-id to generation entries durably offered but not yet proven claimed. `remarcSessionId` is the wake address: wake only ever considers comments filed to that session, and an empty value means this agent is not a wake target. The app reads the same field to decide whether to offer Instant Delivery, so both sides agree on which agent a comment can reach. OMP liveness requires the full versioned lease predicate and never falls back to the legacy transcript/activity heuristic. Historical Claude markers whose `transcriptPath` names a file that does not exist, or whose `lastActivity` is over a day old, are collected at the next SessionStart. Markers are written under adjacent lock directories because independent processes or extension callbacks can race. Legacy `/tmp/remarc-claude-<id>.marker` files are read as a compatibility fallback. They are not eagerly rewritten; a later marker update writes the JSON form, and the app's launch sweep may remove stale legacy files.
 - **`<data file>.lock`** — advisory lock directory guarding every read-modify-write of `comments.json`. Created with an atomic `mkdir` (the one primitive Swift and Node share; Node exposes no `flock`), holding `owner.json` with the holder's pid. Reclaimed only when the owner is gone or the lock is older than 10s. **Every writer in both languages must take it** — the app, the MCP tools, and the hook fallback writers.
 
+Image references in `type.screenshot.imagePath` and `attachments` are stored
+strings. Resolve relative paths (normally `images/<uuid>.png`) beside the data
+file; preserve absolute paths for custom storage folders and legacy records.
+The MCP server does not read the screenshot-folder preference or redirect old
+references when that preference changes. Status updates must preserve both
+forms unchanged. Annotation sidecars belong to the app and are not discovered
+or attached by MCP.
+
+`remarc_get_comment` reports attachment paths for every comment type and embeds
+supported images only during that explicit read. The primary screenshot comes
+first, then attachments in stored order. Duplicate paths share one image;
+at most five images and 3.5 MB of raw image bytes are returned per call. Missing,
+unreadable, unsupported, or over-budget images keep a path and failure reason.
+List output includes attachment counts but never image bytes. The caller's
+access to original files is separate from the MCP server's access.
+
 ## `defaults` contract (domain: `com.metepolat.Remarc`)
 
 These keys are read by the plugin via the `defaults read` shell-out. The app owns the Preferences UI that writes them; the plugin reads them at hook fire time. Absent keys fall back to the documented default.

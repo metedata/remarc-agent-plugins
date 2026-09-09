@@ -410,11 +410,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants);
+          this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -431,10 +431,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants);
+        this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -495,8 +495,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants) {
-        this.code = optimizeExpr(this.code, names, constants);
+      optimizeNames(names, constants2) {
+        this.code = optimizeExpr(this.code, names, constants2);
         return this;
       }
       get names() {
@@ -525,12 +525,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants))
+          if (n.optimizeNames(names, constants2))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -583,12 +583,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a;
-        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants);
-        if (!(super.optimizeNames(names, constants) || this.else))
+        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants2);
+        if (!(super.optimizeNames(names, constants2) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants);
+        this.condition = optimizeExpr(this.condition, names, constants2);
         return this;
       }
       get names() {
@@ -611,10 +611,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants);
+        this.iteration = optimizeExpr(this.iteration, names, constants2);
         return this;
       }
       get names() {
@@ -650,10 +650,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants);
+        this.iterable = optimizeExpr(this.iterable, names, constants2);
         return this;
       }
       get names() {
@@ -695,11 +695,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a, _b;
-        super.optimizeNames(names, constants);
-        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants);
+        super.optimizeNames(names, constants2);
+        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants2);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants2);
         return this;
       }
       get names() {
@@ -1000,7 +1000,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants) {
+    function optimizeExpr(expr, names, constants2) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -1015,14 +1015,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants[n.str];
+        const c = constants2[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants2[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -2984,7 +2984,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve3.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3011,7 +3011,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve3(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3642,7 +3642,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve3(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -3926,7 +3926,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve: resolve3,
       resolveComponent,
       equal,
       serialize,
@@ -19006,7 +19006,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -19023,7 +19023,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -19101,7 +19101,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve3(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -19362,12 +19362,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve3, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -20467,7 +20467,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -21116,12 +21116,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve2();
+        resolve3();
       } else {
-        this._stdout.once("drain", resolve2);
+        this._stdout.once("drain", resolve3);
       }
     });
   }
@@ -21343,7 +21343,7 @@ var LOCK_TIMEOUT_MS = 2e3;
 var LOCK_POLL_MS = 25;
 var LOCK_STALE_MS = 1e4;
 function sleep(ms) {
-  return new Promise((resolve2) => setTimeout(resolve2, ms));
+  return new Promise((resolve3) => setTimeout(resolve3, ms));
 }
 function pidAlive(pid) {
   try {
@@ -21762,12 +21762,12 @@ function throwIfAborted(signal) {
   if (signal?.aborted) throw markerAbortError();
 }
 function sleep2(ms, signal) {
-  if (!signal) return new Promise((resolve2) => setTimeout(resolve2, ms));
+  if (!signal) return new Promise((resolve3) => setTimeout(resolve3, ms));
   throwIfAborted(signal);
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const timer = setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
-      resolve2();
+      resolve3();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -22002,9 +22002,11 @@ function currentHarness(env = process.env) {
 }
 
 // src/screenshot.ts
-import { readFile as readFile3 } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { dirname as dirname2, extname, isAbsolute, resolve } from "node:path";
 var MAX_SCREENSHOT_BYTES = 35e5;
+var MAX_INLINE_IMAGES = 5;
 var MIME_BY_EXTENSION = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -22015,35 +22017,48 @@ var MIME_BY_EXTENSION = {
 function resolveScreenshotPath(storedPath, dataFilePath) {
   return isAbsolute(storedPath) ? storedPath : resolve(dirname2(dataFilePath), storedPath);
 }
-async function loadScreenshotImage(imagePath) {
+async function loadScreenshotImage(imagePath, remainingBytes = MAX_SCREENSHOT_BYTES) {
   const mimeType = MIME_BY_EXTENSION[extname(imagePath).toLowerCase()];
   if (!mimeType) {
     const ext = extname(imagePath) || "none";
     return { ok: false, reason: `unsupported image type (extension: ${ext})` };
   }
-  let bytes;
+  const limit = Number.isFinite(remainingBytes) ? Math.max(0, Math.min(MAX_SCREENSHOT_BYTES, Math.floor(remainingBytes))) : 0;
+  const overBudget = () => ({
+    ok: false,
+    reason: limit < MAX_SCREENSHOT_BYTES ? "the image exceeds the remaining shared inline byte budget" : `the image is over the ${MAX_SCREENSHOT_BYTES / 1e6} MB inline limit`
+  });
+  if (limit === 0) return overBudget();
+  let handle;
   try {
-    bytes = await readFile3(imagePath);
+    handle = await open(imagePath, constants.O_RDONLY | constants.O_NONBLOCK);
+    const info = await handle.stat();
+    if (!info.isFile()) return { ok: false, reason: "the image path is not a regular file" };
+    if (info.size > limit) return overBudget();
+    const buffer = Buffer.alloc(limit + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, size, buffer.length - size, null);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    if (size > limit) return overBudget();
+    if (size === 0) return { ok: false, reason: "the image file is empty" };
+    return {
+      ok: true,
+      data: buffer.subarray(0, size).toString("base64"),
+      mimeType,
+      byteLength: size
+    };
   } catch {
     return { ok: false, reason: "the image file is missing or unreadable" };
+  } finally {
+    await handle?.close().catch(() => void 0);
   }
-  if (bytes.byteLength > MAX_SCREENSHOT_BYTES) {
-    const mb = (bytes.byteLength / 1e6).toFixed(1);
-    const capMb = (MAX_SCREENSHOT_BYTES / 1e6).toFixed(1);
-    return {
-      ok: false,
-      reason: `the image is ${mb} MB, over the ${capMb} MB inline limit`
-    };
-  }
-  return {
-    ok: true,
-    data: bytes.toString("base64"),
-    mimeType,
-    byteLength: bytes.byteLength
-  };
 }
 
 // src/tools.ts
+import { resolve as resolve2 } from "node:path";
 import { randomUUID } from "node:crypto";
 function textResult(text) {
   return { content: [{ type: "text", text }] };
@@ -22087,6 +22102,9 @@ function formatCommentLine(comment, sessions) {
   lines.push(`  Comment: ${displayCommentBody(comment.commentText)}`);
   lines.push(`  Source: ${source} | Session: ${sessionName} | ${date3}`);
   lines.push(`  ID: ${comment.id} (${comment.shortID})`);
+  if (comment.attachments.length > 0) {
+    lines.push(`  Attachments: ${comment.attachments.length} (call remarc_get_comment to inspect)`);
+  }
   const preview = webContextPreview(comment.webContext);
   if (preview) lines.push(`  Context: ${preview}`);
   if (comment.status === "resolved") {
@@ -22128,6 +22146,9 @@ function formatCommentDetail(comment, sessions, dataFilePath = getDataFilePath()
     );
     lines.push(`Image Path: ${imagePath}`);
   }
+  comment.attachments.forEach((path, index) => {
+    lines.push(`Attachment ${index + 1} Path: ${resolveScreenshotPath(path, dataFilePath)}`);
+  });
   lines.push(`Session: ${sessionName} (${comment.sessionID})`);
   lines.push(`Created: ${date3}`);
   lines.push(`Updated: ${updated}`);
@@ -22261,7 +22282,7 @@ ${formatted.join("\n\n")}${nudge}`);
   });
   server2.registerTool("remarc_get_comment", {
     title: "Get a Remarc comment",
-    description: "Get full details of a comment by ID or short ID (5-char UUID prefix).",
+    description: "Get full details of a comment by ID or short ID (5-char UUID prefix), including screenshot and attachment paths with available images inline.",
     annotations: {
       title: "Get a Remarc comment",
       readOnlyHint: true,
@@ -22278,35 +22299,40 @@ ${formatted.join("\n\n")}${nudge}`);
       if (!comment) {
         return errorResult(`Comment not found: ${id}. Use remarc_list_comments to see available comments.`);
       }
-      const detail = formatCommentDetail(comment, state.sessions);
-      if ("screenshot" in comment.type) {
-        const imagePath = resolveScreenshotPath(
-          comment.type.screenshot.imagePath,
-          getDataFilePath()
-        );
-        const image = await loadScreenshotImage(imagePath);
-        if (image.ok) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `${detail}
-(The screenshot is attached to this result as an image.)`
-              },
-              {
-                type: "image",
-                data: image.data,
-                mimeType: image.mimeType
-              }
-            ]
-          };
+      const dataFilePath = getDataFilePath();
+      const content = [
+        { type: "text", text: formatCommentDetail(comment, state.sessions, dataFilePath) }
+      ];
+      const references = [
+        ..."screenshot" in comment.type ? [{ label: "Screenshot", path: comment.type.screenshot.imagePath }] : [],
+        ...comment.attachments.map((path, index) => ({ label: `Attachment ${index + 1}`, path }))
+      ];
+      let remainingBytes = MAX_SCREENSHOT_BYTES;
+      let imageCount = 0;
+      const seen = /* @__PURE__ */ new Map();
+      for (const reference of references) {
+        const path = resolveScreenshotPath(reference.path, dataFilePath);
+        const key = resolve2(path);
+        const previous = seen.get(key);
+        if (previous) {
+          content.push({ type: "text", text: `${reference.label}: same file as ${previous}; see its result above.` });
+          continue;
         }
-        return textResult(
-          `${detail}
-(The screenshot could not be attached: ${image.reason}. Read the file at the Image Path above if your client has a file-reading tool.)`
-        );
+        seen.set(key, reference.label);
+        const image = imageCount >= MAX_INLINE_IMAGES ? { ok: false, reason: `the ${MAX_INLINE_IMAGES}-image inline limit has been reached` } : await loadScreenshotImage(path, remainingBytes);
+        if (!image.ok) {
+          content.push({
+            type: "text",
+            text: `${reference.label} (${path}) could not be attached: ${image.reason}. Open the returned path only if your client can access that local file.`
+          });
+          continue;
+        }
+        content.push({ type: "text", text: `${reference.label} (${path}) is attached below.` });
+        content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+        remainingBytes -= image.byteLength;
+        imageCount += 1;
       }
-      return textResult(detail);
+      return { content };
     } catch (err) {
       return errorResult(String(err));
     }
@@ -22611,7 +22637,7 @@ setHarnessFromArgv(process.argv);
 var server = new McpServer(
   {
     name: "remarc",
-    version: "0.3.2"
+    version: "0.3.3"
   },
   {
     instructions: `Remarc is a macOS contextual commenting app. Comments have short IDs (first 5 UUID chars, e.g. 'a3f2b'). After addressing a comment, call remarc_set_status with status "resolved" and a brief summary of what you did. When resolving multiple comments, use remarc_bulk_set_status to save context.`
