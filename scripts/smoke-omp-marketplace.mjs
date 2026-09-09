@@ -30,7 +30,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const ompArgument = argumentsByName.get("omp") ?? "omp";
 const ompBinary = ompArgument.includes(sep) ? resolve(ompArgument) : ompArgument;
 const marketplaceSource = argumentsByName.get("marketplace") ?? repositoryRoot;
-const expectedVersion = argumentsByName.get("expected-version") ?? "0.13.2";
+const expectedVersion = argumentsByName.get("expected-version") ?? "0.13.3";
 const keep = argumentsByName.get("keep") === "true";
 const corePluginId = "remarc@remarc";
 const wakePluginId = "remarc-wake@remarc";
@@ -539,8 +539,10 @@ try {
   assertInstalledDistributionFiles(userInstallPath, "plugins/remarc", [
     "LICENSE",
     "THIRD-PARTY-NOTICES.md",
+    "mcp/dist/index.js",
+    "skills/remarc/SKILL.md",
   ]);
-  assertInstalledDistributionFiles(userWakeInstallPath, "plugins/remarc-wake", ["LICENSE"]);
+  assertInstalledDistributionFiles(userWakeInstallPath, "plugins/remarc-wake", ["LICENSE", "dist/index.js"]);
 
   let commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
   assertCommand(commands, "skill:remarc", "skill");
@@ -589,8 +591,10 @@ try {
   assertInstalledDistributionFiles(projectInstallPath, "plugins/remarc", [
     "LICENSE",
     "THIRD-PARTY-NOTICES.md",
+    "mcp/dist/index.js",
+    "skills/remarc/SKILL.md",
   ]);
-  assertInstalledDistributionFiles(projectWakeInstallPath, "plugins/remarc-wake", ["LICENSE"]);
+  assertInstalledDistributionFiles(projectWakeInstallPath, "plugins/remarc-wake", ["LICENSE", "dist/index.js"]);
 
   commands = await availableCommandsInOmp({ cwd: project, env: isolatedEnvironment });
   assertCommand(commands, "skill:remarc", "skill");

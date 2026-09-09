@@ -16,7 +16,7 @@ export function notifyRemarcReload(): void {
       "-e",
       'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.metepolat.Remarc.reload"), object: nil, userInfo: nil, deliverImmediately: true)',
     ],
-    { timeout: 5000, stdio: ["pipe", "pipe", "pipe"] },
+    { timeout: 5000 },
     () => {
       // Silently ignore — errors are non-fatal (Remarc may not be running)
     }

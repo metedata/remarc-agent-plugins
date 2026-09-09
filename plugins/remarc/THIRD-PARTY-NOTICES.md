@@ -124,7 +124,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## fast-uri 3.1.5
+## fast-uri 3.1.7
 
 - Source: https://github.com/fastify/fast-uri
 

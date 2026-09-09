@@ -4,16 +4,17 @@ This page distinguishes currently supported behavior from code that merely exist
 
 ## Inspected baselines
 
-The following versions and artifacts were inspected on 2026-08-21. They are not
-all one end-to-end tested combination: package tests and Claude marketplace
-validation ran locally; the shipping app and Codex CLI were checked separately.
-OMP 17.3.4 was exercised from an isolated profile through marketplace install,
-skill discovery, TUI MCP discovery, and the installed MCP bundle.
+The following integration versions and artifacts were inspected on 2026-09-09.
+Claude Code and Codex installed the 0.13.3 candidate into disposable config
+directories. Their cached bundles, skills, and notices matched source, and the
+cached MCP bundles returned screenshot and pasted-attachment image bytes through
+stdio. OMP 17.3.4 was exercised from an isolated profile through marketplace
+install, skill discovery, TUI MCP discovery, and the installed MCP bundle.
 
 | Component | Baseline |
 | --- | --- |
-| Remarc | 1.1.0 for OMP badge and instant delivery; 1.0.1 remains core-only compatible |
-| Remarc plugins | 0.13.2 (this release); 0.13.1 is the prior baseline |
+| Remarc | Native screenshot-folder changes and release verification are tracked in [Remarc #19](https://github.com/metedata/Remarc/pull/19) |
+| Remarc plugins | 0.13.3 (this release); 0.13.2 is the prior baseline |
 | macOS | Remarc's minimum is macOS 14.0 |
 | CI Node.js | 22 |
 | Bundle target | Node.js 18 |
@@ -24,15 +25,18 @@ skill discovery, TUI MCP discovery, and the installed MCP bundle.
 These are not permanent minimum-version guarantees. CI currently exercises
 macOS with Node 22, not a Node-version matrix.
 
-The 0.13.2 candidate passed local package, bundle, Claude marketplace
-validation, and the isolated OMP marketplace smoke on the pinned 17.3.4
-baseline.
+The 0.13.3 candidate passed local package tests and builds, strict MCP and wake
+typechecks, schema and distribution-notice checks, Claude marketplace validation,
+and the isolated OMP marketplace smoke on the pinned 17.3.4 baseline. The OMP
+smoke compares cached bundle and skill bytes as well as licenses. No live agent
+profile was changed by these checks.
 The most recent public OMP smoke installed version 0.13.1 from the
 `metedata/remarc-agent-plugins` Git marketplace into isolated user and project
 profiles and verified cached packages, scope shadowing, commands, MCP tools,
-and marker isolation without a symlink to the checkout. Codex commands were
-checked against the CLI baseline above, but Codex manifest, discovery, and
-clean-install coverage still need to be added to this repository's CI.
+and marker isolation without a symlink to the checkout. The newer 0.13.3 checks
+used the local release candidate as marketplace source. Codex clean-install
+coverage is verified locally; a Codex job still needs to be added to this
+repository's CI.
 
 ## Capability matrix
 

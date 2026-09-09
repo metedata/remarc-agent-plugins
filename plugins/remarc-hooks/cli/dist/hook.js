@@ -311,7 +311,7 @@ function notifyRemarcReload() {
       "-e",
       'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.metepolat.Remarc.reload"), object: nil, userInfo: nil, deliverImmediately: true)'
     ],
-    { timeout: 5e3, stdio: ["pipe", "pipe", "pipe"] },
+    { timeout: 5e3 },
     () => {
     }
   );

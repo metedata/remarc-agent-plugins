@@ -15,7 +15,7 @@ jobs:
 
       - name: build + test remarc MCP
         working-directory: plugins/remarc/mcp
-        run: npm ci && npm audit --audit-level=high && npm test && npm run build
+        run: npm ci && npm audit --audit-level=high && npx tsc --noEmit && npm test && npm run build
 
       - name: verify third-party distribution notices
         run: node scripts/check-third-party-notices.mjs
